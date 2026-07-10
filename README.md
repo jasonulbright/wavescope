@@ -179,3 +179,7 @@ placement, and WebGPU are Chromium-only (Butterchurn covers MilkDrop there
 where WebGL2 exists). The engine toggles only appear where their platform
 feature is present. All analysis is local; no accounts, no storage, no
 telemetry.
+
+## License
+
+[MIT](LICENSE) © 2026 Signal Ridge Labs.

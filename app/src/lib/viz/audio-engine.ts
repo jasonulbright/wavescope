@@ -1,4 +1,5 @@
 import type { AudioFrame, SourceInfo, SourceKind } from "./types";
+import { analyzeFrame, newAnalysisState, type AnalysisState } from "./analyze";
 
 /**
  * AudioEngine: one AnalyserNode fed by one of four sources.
@@ -24,9 +25,7 @@ export class AudioEngine {
   private wave = new Uint8Array(2048);
   private startedAt = 0;
   private lastT = 0;
-  private smoothLevel = 0;
-  private bassAvg = 0;
-  private beatEnv = 0;
+  private analysis: AnalysisState = newAnalysisState();
 
   source: SourceInfo | null = null;
   onSourceEnded: (() => void) | null = null;
@@ -232,43 +231,13 @@ export class AudioEngine {
       this.analyser.getByteTimeDomainData(this.wave);
     }
 
-    const sampleRate = this.ctx?.sampleRate ?? 48000;
-    const hzPerBin = sampleRate / 2 / this.fft.length;
-    const band = (lo: number, hi: number) => {
-      const a = Math.max(0, Math.floor(lo / hzPerBin));
-      const b = Math.min(this.fft.length - 1, Math.ceil(hi / hzPerBin));
-      let sum = 0;
-      for (let i = a; i <= b; i++) sum += this.fft[i];
-      return sum / ((b - a + 1) * 255);
-    };
-
-    const bass = band(20, 250);
-    const mid = band(250, 4000);
-    const treble = band(4000, 16000);
-
-    let rms = 0;
-    for (let i = 0; i < this.wave.length; i += 4) {
-      const s = (this.wave[i] - 128) / 128;
-      rms += s * s;
-    }
-    rms = Math.sqrt(rms / (this.wave.length / 4));
-    this.smoothLevel += (rms - this.smoothLevel) * 0.2;
-
-    // Onset detection: bass energy spiking above its own moving average.
-    this.bassAvg += (bass - this.bassAvg) * 0.04;
-    if (bass > this.bassAvg * 1.35 && bass > 0.08) this.beatEnv = 1;
-    this.beatEnv *= Math.exp(-dt * 6);
-
-    return {
-      fft: this.fft,
-      wave: this.wave,
-      level: this.smoothLevel,
-      bass,
-      mid,
-      treble,
-      beat: this.beatEnv,
-      t: now,
+    return analyzeFrame(
+      this.fft,
+      this.wave,
+      this.ctx?.sampleRate ?? 48000,
+      now,
       dt,
-    };
+      this.analysis,
+    );
   }
 }

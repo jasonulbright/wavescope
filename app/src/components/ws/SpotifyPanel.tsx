@@ -7,6 +7,7 @@ import {
   spotifyConnected,
   spotifyPlay,
 } from "../../lib/spotify";
+import { useFocusTrap } from "../../hooks/use-focus-trap";
 
 interface SpotifyPanelProps {
   /** Arms the system-audio capture (must be called from this click). */
@@ -27,6 +28,7 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
   const [hint, setHint] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   const play = async () => {
     setBusy(true);
@@ -49,6 +51,11 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
 
   return (
     <div
+      ref={trapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Spotify"
+      tabIndex={-1}
       className="absolute inset-0 flex items-center justify-center bg-scope/80 p-6"
       onClick={onClose}
     >

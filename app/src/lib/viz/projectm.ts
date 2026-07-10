@@ -67,6 +67,7 @@ export class ProjectMEngine {
   };
   private pcmPtr = 0;
   private pcmCap = 0;
+  private lastFeed = 0;
 
   private constructor(m: EmscriptenModule) {
     this.m = m;
@@ -109,20 +110,42 @@ export class ProjectMEngine {
     this.fns.loadData(text, smooth ? 1 : 0);
   }
 
-  /** Pull the latest waveform from the audio graph and feed projectM. */
+  /**
+   * Pull the latest waveform from the audio graph and feed projectM. Only the
+   * samples that newly arrived since the last frame are pushed — projectM's
+   * pcm_add_float ACCUMULATES, so re-sending the full 2048-sample analyser
+   * window every frame (each sample fed ~30x at 60fps) drove its internal
+   * beat/bass detection hot and wrong. The web analyser has no history, so we
+   * take the tail of the current window sized to the elapsed wall-clock time
+   * (matches the native port's new-samples-only feed, FINDINGS WS-C1 / native P1).
+   */
   feed(audio: AudioGraphSource) {
     const analyser = audio.analyserNode;
     if (!analyser) return;
-    const n = Math.min(analyser.fftSize, this.fns.maxSamples() || 512);
-    if (this.pcmCap < n) {
+    const sampleRate = audio.audioContext?.sampleRate ?? 48000;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const dt = this.lastFeed ? (now - this.lastFeed) / 1000 : 1 / 60;
+    this.lastFeed = now;
+
+    const window = analyser.fftSize;
+    const maxSamples = this.fns.maxSamples() || 512;
+    // New audio since the last frame, clamped to what the window actually holds
+    // and to projectM's per-call max. A floor of 1 keeps the engine fed if a
+    // frame lands impossibly fast.
+    const fresh = Math.max(
+      1,
+      Math.min(window, maxSamples, Math.round(sampleRate * dt)),
+    );
+    if (this.pcmCap < fresh) {
       if (this.pcmPtr) this.m._free(this.pcmPtr);
-      this.pcmPtr = this.m._malloc(n * 4);
-      this.pcmCap = n;
+      this.pcmPtr = this.m._malloc(fresh * 4);
+      this.pcmCap = fresh;
     }
-    const buf = new Float32Array(analyser.fftSize);
+    const buf = new Float32Array(window);
     analyser.getFloatTimeDomainData(buf);
-    this.m.HEAPF32.set(buf.subarray(0, n), this.pcmPtr >> 2);
-    this.fns.addPcm(this.pcmPtr, n, 1);
+    // Take the freshest `fresh` samples (the tail of the window).
+    this.m.HEAPF32.set(buf.subarray(window - fresh), this.pcmPtr >> 2);
+    this.fns.addPcm(this.pcmPtr, fresh, 1);
   }
 
   render() {

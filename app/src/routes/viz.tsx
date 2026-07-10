@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AudioEngine } from "../lib/viz/audio-engine";
 import { SyncBroadcaster, SyncReceiver, openOnOtherDisplays } from "../lib/viz/sync";
 import { MODES, modeById } from "../lib/viz/modes";
@@ -17,6 +17,7 @@ import {
   type VizPalette,
 } from "../lib/viz/types";
 import { VizCanvas } from "../components/ws/VizCanvas";
+import { useFocusTrap } from "../hooks/use-focus-trap";
 import { WorkerCanvas, workerCanvasSupported } from "../components/ws/WorkerCanvas";
 import type { PaletteRef } from "../lib/viz/render-worker";
 import { MilkdropCanvas } from "../components/ws/MilkdropCanvas";
@@ -294,7 +295,7 @@ function VizPage() {
     const params = new URLSearchParams(location.search);
     const code = params.get("code");
     if (!code) return;
-    void completeSpotifyAuth(code).then(() => {
+    void completeSpotifyAuth(code, params.get("state")).then(() => {
       history.replaceState(null, "", "/viz");
       setSpotifyOpen(true);
     });
@@ -984,8 +985,10 @@ function VizPage() {
         }}
       />
 
-      {/* HUD (top-left). */}
+      {/* HUD (top-left). aria-live so screen readers announce source/mode/fps. */}
       <div
+        role="status"
+        aria-live="polite"
         className={`pointer-events-none absolute left-4 top-4 flex flex-col gap-1 transition-opacity duration-300 ${
           uiVisible ? "opacity-100" : "opacity-0"
         }`}
@@ -1467,10 +1470,7 @@ function VizPage() {
 
       {/* Shortcuts overlay. */}
       {helpOpen ? (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-scope/80 p-6"
-          onClick={() => setHelpOpen(false)}
-        >
+        <HelpOverlay onClose={() => setHelpOpen(false)}>
           <div className="w-full max-w-md border border-white/15 bg-scope p-8">
             <p className="readout text-ultra-soft">SHORTCUTS</p>
             <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 font-meter text-sm">
@@ -1494,8 +1494,32 @@ function VizPage() {
               ))}
             </dl>
           </div>
-        </div>
+        </HelpOverlay>
       ) : null}
+    </div>
+  );
+}
+
+/** The shortcuts overlay wrapper: a focus-trapped, escapable modal dialog. */
+function HelpOverlay({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useFocusTrap<HTMLDivElement>(true);
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      tabIndex={-1}
+      className="absolute inset-0 flex items-center justify-center bg-scope/80 p-6"
+      onClick={onClose}
+    >
+      {children}
     </div>
   );
 }
@@ -1587,6 +1611,7 @@ function SettingsPanel({
 }) {
   const [name, setName] = useState("");
   const [stops, setStops] = useState<string[]>(["#3346c9", "#7ae0c3", "#f2f4f1"]);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   const included = (id: string) => !shuffleInclude || shuffleInclude.includes(id);
   const toggleInclude = (id: string) => {
@@ -1609,6 +1634,11 @@ function SettingsPanel({
 
   return (
     <div
+      ref={trapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Palettes and shuffle settings"
+      tabIndex={-1}
       className="absolute inset-0 flex items-center justify-center bg-scope/80 p-6"
       onClick={onClose}
     >

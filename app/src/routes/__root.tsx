@@ -62,20 +62,21 @@ function buildHead(meta: AppMeta) {
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://api.fontshare.com" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      // Brand fonts are self-hosted (see styles.css @font-face +
+      // public/assets/fonts); nothing is fetched from a font CDN at runtime.
       {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
+        rel: "preload",
+        as: "font" as const,
+        type: "font/woff2",
+        href: "/assets/fonts/satoshi-700.woff2",
         crossOrigin: "anonymous" as const,
       },
       {
-        rel: "stylesheet",
-        href: "https://api.fontshare.com/v2/css?f[]=satoshi@500,700,900&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap",
+        rel: "preload",
+        as: "font" as const,
+        type: "font/woff2",
+        href: "/assets/fonts/jetbrains-mono-latin.woff2",
+        crossOrigin: "anonymous" as const,
       },
       { rel: "icon", sizes: "32x32", href: "/assets/favicon-32.png" },
       { rel: "icon", sizes: "16x16", href: "/assets/favicon-16.png" },

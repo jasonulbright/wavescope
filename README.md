@@ -41,9 +41,11 @@ Live at [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com) â
 
 ## Architecture
 
-The site is a React 19 + TanStack Start app, server-rendered in a single
-Cloudflare Worker. All visualizer code is client-only (canvas + Web Audio) and
-mounts inside effects; nothing touches `window` during render.
+The site is a React 19 + TanStack Start app that builds to a **fully static
+SPA** (`app/dist/client`, prerendered) with no server runtime â€” the whole
+engine runs client-side and it deploys to Vercel (see the Deployment section).
+All visualizer code is client-only (canvas + Web Audio) and mounts inside
+effects; nothing touches `window` during render.
 
 ### The engine (`app/src/lib/viz/`)
 

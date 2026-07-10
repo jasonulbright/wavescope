@@ -11,6 +11,8 @@
 
 export interface ButterchurnVisualizer {
   connectAudio(node: AudioNode): void;
+  /** butterchurn 2.x exposes this; used to unwire the audio edge on teardown. */
+  disconnectAudio?(node: AudioNode): void;
   loadPreset(preset: unknown, blendTimeSec: number): void;
   setRendererSize(width: number, height: number): void;
   render(): void;

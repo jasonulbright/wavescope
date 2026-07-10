@@ -1,0 +1,193 @@
+/* Cascade layer order: reset lowest, then Tailwind/ws-ui base, then
+ * components and finally utilities — so ws-ui's q-* utilities (e.g.
+ * q-button-*) always win over global element resets. */
+@layer reset, theme, base, components, utilities;
+
+@import "tailwindcss" source(none);
+@source "../src";
+@source "../packages/ui/src";
+@import "@wavescope/ui/tailwind.css";
+
+@import "tw-animate-css";
+
+@custom-variant dark (&:where([data-theme="default-dark"], [data-theme="default-dark"] *));
+
+/*
+ * ws-ui is the visual source of truth. This file imports ws-ui's Tailwind
+ * entry once; that entry brings in primitives, semantic theme variables,
+ * typography, z-index, border-width, and q-* component utilities.
+ *
+ * Generated app layout should use normal Tailwind spacing (`p-4`, `gap-2`,
+ * `mt-6`, `h-10`) and ws-ui semantic utilities for color/type
+ * (`bg-q-background-primary`, `text-q-body-md-regular`). Do not use old numeric
+ * token classes such as `px-400` / `gap-200`, and do not reach for raw
+ * q-spacing vars in app code. ws-ui component internals own their q-* classes.
+ *
+ * The `--spacing: 0.25rem` restoration keeps native Tailwind layout utilities
+ * stable for generated apps and legacy scaffold components. The inline theme
+ * aliases below keep shadcn-style imports rendering while new UI migrates to
+ * ws-ui components.
+ */
+@theme {
+  --spacing: 0.25rem;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --color-background: var(--ws-color-background-primary);
+  --color-foreground: var(--ws-color-text-primary);
+  --color-card: var(--ws-color-background-secondary);
+  --color-card-foreground: var(--ws-color-text-primary);
+  --color-popover: var(--ws-color-background-secondary);
+  --color-popover-foreground: var(--ws-color-text-primary);
+  --color-primary: var(--ws-color-button-brand);
+  --color-primary-foreground: var(--ws-color-button-label-brand);
+  --color-secondary: var(--ws-color-background-secondary);
+  --color-secondary-foreground: var(--ws-color-text-primary);
+  --color-muted: var(--ws-color-background-tertiary);
+  --color-muted-foreground: var(--ws-color-text-secondary);
+  --color-accent: var(--ws-color-overlay-hover);
+  --color-accent-foreground: var(--ws-color-text-primary);
+  --color-destructive: var(--ws-color-state-error-bg);
+  --color-destructive-foreground: var(--ws-color-state-error-fg);
+  --color-border: var(--ws-color-border-default);
+  --color-input: var(--ws-color-border-default);
+  --color-ring: var(--ws-color-border-focus);
+  --color-ring-offset-background: var(--ws-color-background-primary);
+
+  --color-chart-1: var(--ws-color-lime-500);
+  --color-chart-2: var(--ws-color-pink-500);
+  --color-chart-3: var(--ws-color-blue-500);
+  --color-chart-4: var(--ws-color-yellow-500);
+  --color-chart-5: var(--ws-color-purple-500);
+
+  --color-sidebar: var(--ws-color-background-secondary);
+  --color-sidebar-foreground: var(--ws-color-text-primary);
+  --color-sidebar-primary: var(--ws-color-button-brand);
+  --color-sidebar-primary-foreground: var(--ws-color-button-label-brand);
+  --color-sidebar-accent: var(--ws-color-overlay-hover);
+  --color-sidebar-accent-foreground: var(--ws-color-text-primary);
+  --color-sidebar-border: var(--ws-color-border-default);
+  --color-sidebar-ring: var(--ws-color-border-focus);
+}
+
+:root {
+  --radius: 0.625rem;
+}
+
+@layer base {
+  html {
+    background-color: var(--ws-color-background-primary);
+    color: var(--ws-color-text-primary);
+    color-scheme: dark;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: var(--ws-color-background-primary);
+    color: var(--ws-color-text-primary);
+    font-family: var(--ws-type-family-secondary);
+  }
+
+  * {
+    border-color: var(--ws-color-border-default);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* WaveScope brand tokens: signal laboratory. Paper ground, ink text,  */
+/* one ultramarine accent, instrument-black product surfaces.          */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --color-paper: #f2f4f1;
+  --color-paper-raised: #ffffff;
+  --color-ink: #121714;
+  --color-ink-soft: #4c554f;
+  --color-ultra: #3346c9;
+  --color-ultra-soft: #6b7ade;
+  --color-scope: #0b0d0c;
+  --color-scope-edge: #23282533;
+  --font-display: "Satoshi", "Satoshi Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-meter: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+
+@layer base {
+  /* WaveScope is a light product: override the template's dark defaults. */
+  html {
+    background-color: #f2f4f1;
+    color: #121714;
+    color-scheme: light;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: #f2f4f1;
+    color: #121714;
+    font-family: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  ::selection {
+    background: #3346c9;
+    color: #f2f4f1;
+  }
+}
+
+@layer components {
+  /* Monospace device readouts (panel chrome, meter labels). */
+  .readout {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.625rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* Hairline instrument frame. */
+  .frame-hairline {
+    border: 1px solid rgba(18, 23, 20, 0.18);
+  }
+
+  /* The graph-paper ground drawn over the generated paper plate. */
+  .lab-grid {
+    background-image:
+      linear-gradient(rgba(18, 23, 20, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(18, 23, 20, 0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Mount-fired text builds: transform only, never opacity-to-zero, so a
+   * full-page screenshot always shows every section fully rendered. */
+  .build-rise {
+    animation: ws-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .build-rise-2 {
+    animation: ws-rise 0.7s 0.12s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .build-rise-3 {
+    animation: ws-rise 0.7s 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @keyframes ws-rise {
+    from {
+      transform: translateY(26px);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .build-rise,
+    .build-rise-2,
+    .build-rise-3 {
+      animation: none;
+    }
+  }
+}

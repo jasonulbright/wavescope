@@ -11,6 +11,26 @@ machine.
 The v2 engine architecture (worker isolation, projectM WASM, WebGPU) is
 documented in `ROADMAP-V2.md`.
 
+## Screenshots
+
+Live at [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com) — or click through the four engines here.
+
+**WaveScope** — the 34 built-in canvas modes (Fountain, demo signal):
+
+![WaveScope engine — Fountain mode](screenshots/webui-wavescope.webp)
+
+**GPU** — WebGPU per-pixel WGSL shaders, full resolution up to 8K (Metaballs):
+
+![GPU engine — Metaballs](screenshots/webui-gpu.webp)
+
+**projectM** — real MilkDrop: raw `.milk` presets on libprojectM/WebAssembly (WaveScope Kaleido):
+
+![projectM engine — WaveScope Kaleido preset](screenshots/webui-projectm.webp)
+
+**milkdrop** — Butterchurn with the converted classic preset library (martin — extreme heat):
+
+![milkdrop engine — martin, extreme heat](screenshots/webui-milkdrop.webp)
+
 ## Product surfaces
 
 | Route | What it is |

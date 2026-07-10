@@ -7,9 +7,33 @@
  *    console keeps opening with no connection at all.
  *
  * Bump VERSION to invalidate everything after a breaking asset change.
+ * (v2 purges v1 caches that could hold rewrite-poisoned entries.)
  */
-const VERSION = "ws-v1";
+const VERSION = "ws-v2";
 const SHELL = "/index.html";
+
+/**
+ * Only cache what the URL claims to be. The host rewrites EVERY unknown path
+ * to the HTML shell with a 200 — during a deploy race an asset URL can answer
+ * text/html, and caching that poisons the engine loaders (a .js that is
+ * secretly index.html). Navigations are the only requests allowed to store
+ * HTML.
+ */
+function okToCache(req, res) {
+  if (!res.ok) return false;
+  if (req.mode === "navigate") return true;
+  const ct = res.headers.get("content-type") || "";
+  return !ct.includes("text/html");
+}
+
+function putGuarded(req, res) {
+  if (!okToCache(req, res)) return;
+  const copy = res.clone();
+  caches
+    .open(VERSION)
+    .then((c) => c.put(req, copy))
+    .catch(() => {});
+}
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
@@ -40,14 +64,16 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches
-            .open(VERSION)
-            .then((c) => c.put(SHELL, copy))
-            .catch(() => {});
+          if (res.ok) {
+            const copy = res.clone();
+            caches
+              .open(VERSION)
+              .then((c) => c.put(SHELL, copy))
+              .catch(() => {});
+          }
           return res;
         })
-        .catch(() => caches.match(SHELL)),
+        .catch(() => caches.match(SHELL).then((hit) => hit || Response.error())),
     );
     return;
   }
@@ -59,13 +85,7 @@ self.addEventListener("fetch", (e) => {
         (hit) =>
           hit ||
           fetch(req).then((res) => {
-            if (res.ok) {
-              const copy = res.clone();
-              caches
-                .open(VERSION)
-                .then((c) => c.put(req, copy))
-                .catch(() => {});
-            }
+            putGuarded(req, res);
             return res;
           }),
       ),
@@ -78,16 +98,10 @@ self.addEventListener("fetch", (e) => {
     caches.match(req).then((hit) => {
       const refresh = fetch(req)
         .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches
-              .open(VERSION)
-              .then((c) => c.put(req, copy))
-              .catch(() => {});
-          }
+          putGuarded(req, res);
           return res;
         })
-        .catch(() => hit);
+        .catch(() => hit || Response.error());
       return hit || refresh;
     }),
   );

@@ -106,6 +106,39 @@
 /* one ultramarine accent, instrument-black product surfaces.          */
 /* ------------------------------------------------------------------ */
 
+/* Self-hosted brand fonts (public/assets/fonts) — no runtime CDN fetch, so a
+ * visitor's IP never reaches a font host and the CSP can stay tight. Satoshi
+ * (ITF/Fontshare) at the three weights the app uses; JetBrains Mono (OFL) as
+ * one variable latin file. See public/vendor/NOTICE.txt for licenses. */
+@font-face {
+  font-family: "Satoshi";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/satoshi-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Satoshi";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/fonts/satoshi-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Satoshi";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/assets/fonts/satoshi-900.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/assets/fonts/jetbrains-mono-latin.woff2") format("woff2");
+}
+
 @theme {
   --color-paper: #f2f4f1;
   --color-paper-raised: #ffffff;

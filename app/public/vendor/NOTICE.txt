@@ -9,3 +9,13 @@ butterchurnPresets.min.js
   butterchurn-presets v2.4.7 — classic MilkDrop community presets converted
   for Butterchurn (presets copyright their original authors).
   MIT License. https://github.com/jberg/butterchurn-presets
+
+--- Self-hosted brand fonts (public/assets/fonts/) ---
+
+JetBrains Mono (jetbrains-mono-latin.woff2)
+  SIL Open Font License 1.1. Latin subset, variable weight.
+  https://github.com/JetBrains/JetBrainsMono
+
+Satoshi (satoshi-500/700/900.woff2)
+  Indian Type Foundry, via Fontshare — free license permits web embedding
+  and self-hosting. https://www.fontshare.com/fonts/satoshi

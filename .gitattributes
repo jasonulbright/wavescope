@@ -1,0 +1,7 @@
+# Normalize line endings to LF in the repo (prettier/eslint expect LF).
+# Fixes CRLF lint noise on Windows checkouts.
+* text=auto eol=lf
+*.png binary
+*.webp binary
+*.woff2 binary
+*.wasm binary

@@ -48,6 +48,9 @@ export function MilkdropCanvas({
     let raf = 0;
     let frames = 0;
     let fpsWindowStart = 0;
+    // Held so teardown can unwire the audio edge (which otherwise pins the
+    // visualizer + its WebGL context to the session-long analyser).
+    let connectedNode: AudioNode | null = null;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const size = (): [number, number] => {
@@ -80,6 +83,7 @@ export function MilkdropCanvas({
           height: h,
         });
         viz.connectAudio(node);
+        connectedNode = node;
         const preset =
           extraRef.current?.[presetRef.current] ??
           bundle.presets[presetRef.current] ??
@@ -128,7 +132,26 @@ export function MilkdropCanvas({
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      // Unwire the audio edge and release the WebGL context, so switching
+      // engines doesn't accumulate butterchurn contexts until the browser
+      // force-loses the oldest (~16) and MilkDrop goes black. ProjectMCanvas
+      // and WebGPUCanvas already call destroy(); this is the parity teardown.
+      const viz = vizRef.current;
+      if (viz && connectedNode && typeof viz.disconnectAudio === "function") {
+        try {
+          viz.disconnectAudio(connectedNode);
+        } catch {
+          // butterchurn build without disconnectAudio: the loseContext below
+          // still frees the scarce GPU resource.
+        }
+      }
+      const gl =
+        canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+      const loseCtx = gl?.getExtension("WEBGL_lose_context");
+      loseCtx?.loseContext();
       vizRef.current = null;
+      bundleRef.current = null;
+      connectedNode = null;
     };
     // onFps/onSize are stable setters from the console.
     // eslint-disable-next-line react-hooks/exhaustive-deps

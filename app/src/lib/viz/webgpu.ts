@@ -50,6 +50,25 @@ fn vs(@builtin(vertex_index) i: u32) -> VSOut {
   out.uv = p[i] * 0.5 + 0.5;
   return out;
 }
+
+// Per-frame audio textures: the full 1024-bin FFT and the 2048-sample
+// waveform, so modes can react per-bin instead of to 4 scalar bands.
+@group(0) @binding(1) var spectrum: texture_1d<f32>;
+@group(0) @binding(2) var waveform: texture_1d<f32>;
+
+/** FFT magnitude (0..1) at x in [0,1] across the linear bin axis. */
+fn spec(x: f32) -> f32 {
+  return textureLoad(spectrum, i32(clamp(x, 0.0, 1.0) * 1023.0), 0).r;
+}
+/** FFT on a log-ish frequency axis (pitch perception): lows get most of x. */
+fn specLog(x: f32) -> f32 {
+  let e = clamp(x, 0.0, 1.0);
+  return spec(pow(e, 2.6) * 0.86);
+}
+/** Waveform sample (-1..1) at x in [0,1]. */
+fn wav(x: f32) -> f32 {
+  return textureLoad(waveform, i32(clamp(x, 0.0, 1.0) * 2047.0), 0).r * 2.0 - 1.0;
+}
 `;
 
 export const GPU_MODES: GpuMode[] = [
@@ -485,6 +504,96 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
 }
 `,
   },
+  {
+    id: "gpu-spectrum",
+    name: "Spectrum bars",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  // 96 bars on a log frequency axis, straight from the FFT texture.
+  let bars = 96.0;
+  let px = in.uv.x;
+  let slot = floor(px * bars) / bars + 0.5 / bars;
+  let m = specLog(slot);
+  let h = 0.04 + m * 0.82;
+  let base = 0.14;
+  let inBarX = step(abs(fract(px * bars) - 0.5), 0.42);
+  var v = 0.0;
+  let yUp = (in.uv.y - base) / max(h, 0.001);
+  if (yUp >= 0.0 && yUp <= 1.0) {
+    v = inBarX * (0.30 + 0.70 * yUp);
+  }
+  // Hot cap at each bar's peak; the beat flares it.
+  let cap = exp(-abs(in.uv.y - (base + h)) * 90.0) * inBarX * (0.6 + u.beat * 0.8);
+  // Dim mirror reflection below the baseline.
+  let yDn = (base - in.uv.y) / max(h * 0.35, 0.001);
+  if (yDn >= 0.0 && yDn <= 1.0) {
+    v = v + inBarX * 0.16 * (1.0 - yDn);
+  }
+  let hue = fract(0.66 - slot * 0.55 + u.time * 0.01);
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.33, 0.67)));
+  let bright = clamp(v * (0.6 + u.level * 0.7) + cap * m, 0.0, 1.3);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-specring",
+    name: "Spectrum ring",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let r = length(p);
+  let a = atan2(p.y, p.x);
+  // Mirror the log spectrum around the top of the circle; lows meet at the
+  // bottom seam. The whole dial slowly rotates.
+  let x = abs(fract(a / 6.28318 + 0.75 + u.time * 0.008) * 2.0 - 1.0);
+  let m = specLog(x);
+  let ring = 0.40 + m * 0.32 + u.bass * 0.04;
+  let d = abs(r - ring);
+  let line = exp(-d * d * 900.0) * (0.45 + m * 1.5);
+  // Soft fill inside the ring so the shape reads at a glance.
+  let fill = step(r, ring) * exp(-(ring - r) * 9.0) * 0.22 * (0.4 + u.level);
+  let hue = fract(0.6 + x * 0.45 + u.time * 0.012);
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.33, 0.67)));
+  let bright = clamp(line + fill + u.beat * exp(-d * 16.0) * 0.35, 0.0, 1.3);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-scope",
+    name: "Scope lines",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  let x = in.uv.x;
+  var col = vec3<f32>(0.0);
+  // Three slightly offset traces of the live waveform, RGB-split; treble
+  // widens the chromatic separation.
+  for (var i = 0; i < 3; i = i + 1) {
+    let fi = f32(i);
+    let s = wav(clamp(x + fi * 0.004, 0.0, 1.0));
+    let yc = 0.5 + s * (0.26 + u.level * 0.35)
+           + (fi - 1.0) * 0.012 * (1.0 + u.treble * 4.0);
+    let d = abs(in.uv.y - yc);
+    let g = exp(-d * d * 5200.0) + exp(-d * 26.0) * 0.10;
+    var tint = vec3<f32>(0.35, 0.55, 1.0);
+    if (i == 1) { tint = vec3<f32>(0.40, 1.00, 0.75); }
+    if (i == 2) { tint = vec3<f32>(1.00, 0.45, 0.75); }
+    col = col + tint * g * (0.7 + u.level * 0.8);
+  }
+  // Faint graticule, like the bench scope the deck is styled after.
+  let gx = pow(1.0 - abs(fract(x * 10.0) * 2.0 - 1.0), 60.0);
+  let gy = pow(1.0 - abs(fract(in.uv.y * 6.0) * 2.0 - 1.0), 60.0);
+  col = col + vec3<f32>(0.5, 0.6, 0.55) * (gx + gy) * 0.05;
+  col = col + vec3<f32>(0.3, 0.5, 1.0) * u.beat * 0.08;
+  return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.3)), 1.0);
+}
+`,
+  },
 ];
 
 export function gpuModeById(id: string | undefined): GpuMode {
@@ -505,8 +614,11 @@ export class WebGPURenderer {
   private format: any;
   private uniformBuf: any;
   private uniformData = new Float32Array(8);
+  private spectrumTex: any;
+  private waveformTex: any;
+  private pipelineLayout: any;
+  private bindGroup: any;
   private pipelines = new Map<string, any>();
-  private bindGroups = new Map<string, any>();
   private canvas: HTMLCanvasElement;
 
   private constructor(canvas: HTMLCanvasElement, device: any, ctx: any, format: any) {
@@ -517,6 +629,47 @@ export class WebGPURenderer {
     this.uniformBuf = device.createBuffer({
       size: 32,
       usage: 0x40 | 0x8, // UNIFORM | COPY_DST
+    });
+    // Audio textures, rewritten each frame straight from the analyser's byte
+    // arrays (r8unorm: one byte per texel, sampled as 0..1).
+    this.spectrumTex = device.createTexture({
+      size: { width: 1024 },
+      dimension: "1d",
+      format: "r8unorm",
+      usage: 0x4 | 0x2, // TEXTURE_BINDING | COPY_DST
+    });
+    this.waveformTex = device.createTexture({
+      size: { width: 2048 },
+      dimension: "1d",
+      format: "r8unorm",
+      usage: 0x4 | 0x2,
+    });
+    // Explicit layout (not "auto"): auto layouts prune bindings a shader does
+    // not use, which would make one shared bind group invalid for modes that
+    // ignore the audio textures. One layout + one bind group serves them all.
+    const bgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: 0x2 /* FRAGMENT */, buffer: { type: "uniform" } },
+        {
+          binding: 1,
+          visibility: 0x2,
+          texture: { sampleType: "float", viewDimension: "1d" },
+        },
+        {
+          binding: 2,
+          visibility: 0x2,
+          texture: { sampleType: "float", viewDimension: "1d" },
+        },
+      ],
+    });
+    this.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
+    this.bindGroup = device.createBindGroup({
+      layout: bgl,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniformBuf } },
+        { binding: 1, resource: this.spectrumTex.createView() },
+        { binding: 2, resource: this.waveformTex.createView() },
+      ],
     });
   }
 
@@ -541,7 +694,7 @@ export class WebGPURenderer {
         code: PRELUDE + mode.fragment,
       });
       pipe = this.device.createRenderPipeline({
-        layout: "auto",
+        layout: this.pipelineLayout,
         vertex: { module, entryPoint: "vs" },
         fragment: {
           module,
@@ -551,18 +704,12 @@ export class WebGPURenderer {
         primitive: { topology: "triangle-list" },
       });
       this.pipelines.set(mode.id, pipe);
-      const bind = this.device.createBindGroup({
-        layout: pipe.getBindGroupLayout(0),
-        entries: [{ binding: 0, resource: { buffer: this.uniformBuf } }],
-      });
-      this.bindGroups.set(mode.id, bind);
     }
     return pipe;
   }
 
   render(mode: GpuMode, f: AudioFrame) {
     const pipe = this.pipelineFor(mode);
-    const bind = this.bindGroups.get(mode.id);
     const d = this.uniformData;
     d[0] = this.canvas.width;
     d[1] = this.canvas.height;
@@ -573,6 +720,22 @@ export class WebGPURenderer {
     d[6] = f.treble;
     d[7] = f.beat;
     this.device.queue.writeBuffer(this.uniformBuf, 0, d);
+    if (f.fft.length >= 1024) {
+      this.device.queue.writeTexture(
+        { texture: this.spectrumTex },
+        f.fft,
+        {},
+        { width: 1024 },
+      );
+    }
+    if (f.wave.length >= 2048) {
+      this.device.queue.writeTexture(
+        { texture: this.waveformTex },
+        f.wave,
+        {},
+        { width: 2048 },
+      );
+    }
 
     const encoder = this.device.createCommandEncoder();
     const view = this.ctx.getCurrentTexture().createView();
@@ -587,7 +750,7 @@ export class WebGPURenderer {
       ],
     });
     pass.setPipeline(pipe);
-    pass.setBindGroup(0, bind);
+    pass.setBindGroup(0, this.bindGroup);
     pass.draw(3);
     pass.end();
     this.device.queue.submit([encoder.finish()]);
@@ -595,6 +758,8 @@ export class WebGPURenderer {
 
   destroy() {
     try {
+      this.spectrumTex.destroy();
+      this.waveformTex.destroy();
       this.ctx.unconfigure();
       this.device.destroy();
     } catch {

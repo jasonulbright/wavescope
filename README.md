@@ -100,9 +100,10 @@ mounts inside effects; nothing touches `window` during render.
   35+ live canvases (hero, gallery, meters, footer trace) analyze a single
   signal instead of each owning an AudioContext.
 
-- **`milkdrop.ts`** — Butterchurn engine: lazy-loads Butterchurn (the
-  MIT-licensed WebGL port of MilkDrop 2) and its converted classic preset
-  library from CDN, keeping ~1 MB of WebGL engine out of the app bundle.
+- **`milkdrop.ts`** — Butterchurn engine: lazy-loads the self-hosted
+  Butterchurn build (the MIT-licensed WebGL port of MilkDrop 2) and its
+  converted classic preset library from `app/public/vendor/` — no third-party
+  CDN at runtime — keeping ~1 MB of WebGL engine out of the app bundle.
   `MilkdropCanvas.tsx` connects it to the engine's pass-through analyser
   node, so presets follow source switches; preset changes blend in place
   (2.7 s, like classic MilkDrop) without a WebGL rebuild. Butterchurn JSON
@@ -117,8 +118,11 @@ mounts inside effects; nothing touches `window` during render.
   Loaded on demand, gated on WebGL2, capped at 1440p (fixed WASM heap).
 
 - **`webgpu.ts`** — the WebGPU engine (v2 Phase C): GPU-native per-pixel
-  modes as WGSL fragment shaders (Plasma field, Warp tunnel, Fractal fold)
-  driven by an audio uniform buffer, rendered full-resolution up to 8K.
+  modes as WGSL fragment shaders driven by an audio uniform buffer plus
+  per-frame FFT and waveform textures (`spec()`/`specLog()`/`wav()` in the
+  shared prelude), rendered full-resolution up to 8K. Modes range from pure
+  fields (Plasma, Fractal fold, Liquid noise) to true per-bin spectrum
+  instruments (Spectrum bars, Spectrum ring, Scope lines).
   `WebGPUCanvas.tsx` drives it; gated on `navigator.gpu`.
 
 - **`spotify.ts`** — Spotify integration (`SpotifyPanel.tsx`): a quick path

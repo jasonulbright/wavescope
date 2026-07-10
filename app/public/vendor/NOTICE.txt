@@ -1,0 +1,11 @@
+Third-party code vendored for self-hosted serving. Unmodified builds from npm.
+
+butterchurn.min.js
+  butterchurn v2.6.7 — WebGL implementation of the MilkDrop 2 visualizer.
+  Copyright (c) Jordan Berg. MIT License.
+  https://github.com/jberg/butterchurn
+
+butterchurnPresets.min.js
+  butterchurn-presets v2.4.7 — classic MilkDrop community presets converted
+  for Butterchurn (presets copyright their original authors).
+  MIT License. https://github.com/jberg/butterchurn-presets

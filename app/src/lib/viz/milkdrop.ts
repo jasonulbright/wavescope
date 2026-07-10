@@ -4,8 +4,9 @@
  * shifter and friends).
  *
  * The engine is ~800 kB of WebGL code, so it is NOT in the app bundle: it
- * loads from the CDN the first time the user switches the console to the
- * MilkDrop engine. Client-only: call from effects or handlers.
+ * lazy-loads from this site's own /vendor files (see public/vendor/NOTICE.txt)
+ * the first time the user switches the console to the MilkDrop engine — no
+ * third-party CDN at runtime. Client-only: call from effects or handlers.
  */
 
 export interface ButterchurnVisualizer {
@@ -30,10 +31,9 @@ export interface MilkdropBundle {
   presetNames: string[];
 }
 
-const BUTTERCHURN_SRC =
-  "https://cdn.jsdelivr.net/npm/butterchurn@2.6.7/lib/butterchurn.min.js";
-const PRESETS_SRC =
-  "https://cdn.jsdelivr.net/npm/butterchurn-presets@2.4.7/lib/butterchurnPresets.min.js";
+// Self-hosted pinned builds (butterchurn 2.6.7, butterchurn-presets 2.4.7).
+const BUTTERCHURN_SRC = "/vendor/butterchurn.min.js";
+const PRESETS_SRC = "/vendor/butterchurnPresets.min.js";
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {

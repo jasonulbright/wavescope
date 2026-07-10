@@ -313,6 +313,178 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
 }
 `,
   },
+  {
+    id: "gpu-aurora",
+    name: "Aurora",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let t = u.time * 0.3;
+  var glow = 0.0;
+  var hueShift = 0.0;
+  // Three drifting curtains, each a soft vertical band whose centerline waves.
+  for (var i = 0; i < 3; i = i + 1) {
+    let fi = f32(i);
+    let sway = sin(p.y * (1.4 + fi * 0.6) + t * (1.0 + fi * 0.4) + fi * 2.1)
+             + 0.5 * sin(p.y * 3.7 + t * 2.0 + fi * 4.0 + u.mid * 3.0);
+    let center = -0.7 + fi * 0.7 + 0.35 * sway;
+    let d = abs(p.x - center);
+    let band = exp(-d * d * (7.0 - u.bass * 4.0));
+    // Curtains brighten toward the top and shimmer with treble.
+    let vert = 0.55 + 0.45 * smoothstep(-1.0, 1.0, p.y);
+    let shimmer = 0.8 + 0.2 * sin(p.y * 24.0 - u.time * 5.0 + fi * 3.0) * u.treble * 3.0;
+    glow = glow + band * vert * shimmer;
+    hueShift = hueShift + band * fi;
+  }
+  // Green-teal-violet aurora band.
+  let hue = 0.36 + 0.10 * hueShift + 0.08 * sin(t + p.y) + u.treble * 0.15;
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.33, 0.67)));
+  let bright = clamp(glow * (0.45 + u.level * 1.2) + u.beat * 0.15, 0.0, 1.25);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-supernova",
+    name: "Supernova",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let r = length(p);
+  let a = atan2(p.y, p.x);
+  let t = u.time;
+  // Expanding shockwave rings, sharpened; the beat recharges their brightness.
+  let ringPhase = r * 9.0 - t * (2.0 + u.level * 3.0);
+  var rings = pow(0.5 + 0.5 * sin(ringPhase * 3.14159), 6.0);
+  rings = rings * smoothstep(0.05, 0.35, r) * (0.3 + u.beat * 1.2);
+  // Ray spokes flare with treble.
+  let spokes = pow(abs(sin(a * 9.0 + t * 0.4)), 8.0) * exp(-r * 2.2) * (0.4 + u.treble * 2.0);
+  // Core pulses with bass.
+  let core = exp(-r * r * (14.0 - u.bass * 8.0)) * (0.8 + u.bass * 1.5);
+  let v = rings + spokes + core;
+  let hue = fract(0.02 + r * 0.12 - t * 0.02 + u.mid * 0.15);
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.25, 0.55)));
+  let bright = clamp(v, 0.0, 1.35);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-ripples",
+    name: "Interference",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let t = u.time;
+  // Three orbiting wave sources; bass stretches the wavelength.
+  let freq = 14.0 - u.bass * 7.0;
+  var v = 0.0;
+  for (var i = 0; i < 3; i = i + 1) {
+    let fi = f32(i);
+    let src = 0.7 * vec2<f32>(
+      sin(t * (0.31 + fi * 0.11) + fi * 2.09),
+      cos(t * (0.23 + fi * 0.13) + fi * 4.19),
+    );
+    v = v + sin(length(p - src) * freq - t * 2.5 + fi);
+  }
+  v = v / 3.0;
+  // Sharpen crests into caustic-like filaments.
+  let crest = pow(1.0 - abs(v), 3.0);
+  let hue = fract(0.52 + 0.12 * v + u.treble * 0.25 + t * 0.015);
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.33, 0.67)));
+  let bright = clamp(0.15 + crest * (0.8 + u.level * 1.2) + u.beat * 0.25, 0.0, 1.25);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-phyllo",
+    name: "Phyllotaxis",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let t = u.time;
+  let spin = t * 0.08;
+  let rot = vec2<f32>(cos(spin), sin(spin));
+  p = vec2<f32>(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
+  // Golden-angle seed spiral: accumulate glow from each floret.
+  let GA = 2.39996323;
+  let count = 72;
+  let spread = 0.105 + 0.02 * sin(t * 0.5) + u.bass * 0.02;
+  var glow = 0.0;
+  var hueAcc = 0.0;
+  for (var i = 1; i <= count; i = i + 1) {
+    let fi = f32(i);
+    let ang = fi * GA + t * 0.15;
+    let rad = spread * sqrt(fi);
+    let c = vec2<f32>(cos(ang), sin(ang)) * rad;
+    let d = p - c;
+    // Florets swell with the band matching their ring: inner=bass, mid, outer=treble.
+    let ring = fi / f32(count);
+    let energy = mix(u.bass, mix(u.mid, u.treble, clamp(ring * 2.0 - 1.0, 0.0, 1.0)), clamp(ring * 2.0, 0.0, 1.0));
+    let size = 3600.0 - energy * 2400.0 - u.beat * 600.0;
+    let g = exp(-dot(d, d) * size);
+    glow = glow + g;
+    hueAcc = hueAcc + g * ring;
+  }
+  let hue = fract(0.08 + hueAcc / max(glow, 0.001) * 0.5 + t * 0.02);
+  let col = 0.5 + 0.5 * cos(6.28318 * (hue + vec3<f32>(0.0, 0.33, 0.67)));
+  let bright = clamp(glow * (0.55 + u.level * 0.9), 0.0, 1.3);
+  return vec4<f32>(col * bright, 1.0);
+}
+`,
+  },
+  {
+    id: "gpu-horizon",
+    name: "Neon horizon",
+    fragment: /* wgsl */ `
+@fragment
+fn fs(in: VSOut) -> @location(0) vec4<f32> {
+  var p = in.uv * 2.0 - 1.0;
+  p.x *= u.res.x / u.res.y;
+  let t = u.time;
+  var col = vec3<f32>(0.0);
+  let horizon = -0.12;
+  if (p.y < horizon) {
+    // Perspective floor: project to grid space, scroll toward the viewer.
+    let depth = horizon - p.y;
+    let z = 1.0 / (depth + 0.001);
+    let gx = p.x * z * 0.7;
+    let gz = z * 0.5 + t * (1.2 + u.level * 2.5);
+    let lineX = pow(1.0 - abs(fract(gx) * 2.0 - 1.0), 8.0);
+    let lineZ = pow(1.0 - abs(fract(gz) * 2.0 - 1.0), 8.0);
+    let grid = clamp(lineX + lineZ, 0.0, 1.0) * exp(-depth * 0.25) * smoothstep(0.0, 0.05, depth);
+    let gridHue = fract(0.78 + u.mid * 0.1);
+    col = col + grid * (0.6 + u.bass * 0.8) * (0.5 + 0.5 * cos(6.28318 * (gridHue + vec3<f32>(0.0, 0.33, 0.67))));
+  } else {
+    // Sun: bass-swollen disc with animated scanline gaps.
+    let sunC = vec2<f32>(0.0, horizon + 0.34);
+    let sr = 0.26 + u.bass * 0.10 + u.beat * 0.04;
+    let d = length(p - sunC);
+    let disc = smoothstep(sr, sr - 0.015, d);
+    let gaps = smoothstep(0.35, 0.65, 0.5 + 0.5 * sin((p.y - horizon) * 70.0 - t * 3.0));
+    let sun = disc * mix(1.0, gaps, smoothstep(sunC.y + sr * 0.1, sunC.y - sr, p.y));
+    let sunCol = mix(vec3<f32>(1.0, 0.25, 0.55), vec3<f32>(1.0, 0.85, 0.3), clamp((p.y - sunC.y) / sr * 0.5 + 0.5, 0.0, 1.0));
+    // Treble starfield: hash sparkle above the horizon.
+    let cell = floor(p * 24.0);
+    let star = fract(sin(dot(cell, vec2<f32>(127.1, 311.7))) * 43758.5453);
+    let tw = step(0.985, star) * (0.5 + 0.5 * sin(t * 6.0 + star * 40.0)) * (0.3 + u.treble * 2.5);
+    col = col + sun * sunCol * (0.9 + u.level * 0.6) + vec3<f32>(tw);
+    // Horizon glow.
+    col = col + vec3<f32>(0.9, 0.2, 0.6) * exp(-abs(p.y - horizon) * 9.0) * (0.35 + u.bass * 0.5);
+  }
+  return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.35)), 1.0);
+}
+`,
+  },
 ];
 
 export function gpuModeById(id: string | undefined): GpuMode {

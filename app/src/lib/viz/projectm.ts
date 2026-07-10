@@ -25,6 +25,11 @@ export const BUNDLED_MILK: Array<{ name: string; url: string }> = [
   { name: "WaveScope Lattice", url: "/presets-milk/wavescope-lattice.milk" },
   { name: "WaveScope Ember", url: "/presets-milk/wavescope-ember.milk" },
   { name: "WaveScope Kaleido", url: "/presets-milk/wavescope-kaleido.milk" },
+  { name: "WaveScope Vortex", url: "/presets-milk/wavescope-vortex.milk" },
+  { name: "WaveScope Tide", url: "/presets-milk/wavescope-tide.milk" },
+  { name: "WaveScope Prism", url: "/presets-milk/wavescope-prism.milk" },
+  { name: "WaveScope Comet", url: "/presets-milk/wavescope-comet.milk" },
+  { name: "WaveScope Ripple", url: "/presets-milk/wavescope-ripple.milk" },
   { name: "Test: per-frame color", url: "/presets-milk/102-per_frame3.milk" },
   { name: "Test: per-frame init", url: "/presets-milk/105-per_frame_init.milk" },
 ];

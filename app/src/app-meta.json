@@ -1,7 +1,7 @@
 {
   "og_title": "WaveScope",
   "og_description": "A music visualizer built like an instrument: 34 built-in modes plus real MilkDrop and WebGPU shader engines, any audio source, up to 8K, on every display you own.",
-  "og_image_url": "/assets/og-image.png",
+  "og_image_url": "https://wavescope.signalridgelabs.com/assets/og-image.png",
   "favicon_url": "/assets/favicon.png",
   "og_video_url": null
 }

@@ -16,6 +16,7 @@
 
 const STORE_KEY = "wavescope-spotify";
 const VERIFIER_KEY = "wavescope-spotify-verifier";
+const STATE_KEY = "wavescope-spotify-state";
 const SCOPES = "user-modify-playback-state user-read-playback-state";
 
 /**
@@ -86,6 +87,12 @@ export async function beginSpotifyAuth(
   const challenge = base64url(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
   );
+  // CSRF defense-in-depth alongside PKCE: a random `state` echoed back and
+  // checked on return, matching the native sibling's flow.
+  const stateBytes = new Uint8Array(16);
+  crypto.getRandomValues(stateBytes);
+  const state = base64url(stateBytes.buffer);
+  sessionStorage.setItem(STATE_KEY, state);
   saveSpotify({ clientId });
   const url = new URL("https://accounts.spotify.com/authorize");
   url.searchParams.set("client_id", clientId);
@@ -94,6 +101,7 @@ export async function beginSpotifyAuth(
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("scope", SCOPES);
+  url.searchParams.set("state", state);
   location.href = url.toString();
 }
 
@@ -119,11 +127,22 @@ async function tokenRequest(body: Record<string, string>): Promise<void> {
   });
 }
 
-/** Call on /viz load when ?code= is present. True on success. */
-export async function completeSpotifyAuth(code: string): Promise<boolean> {
+/**
+ * Call on /viz load when ?code= is present. Pass the returned ?state= so it can
+ * be checked against the value we stored before the redirect (CSRF). True on
+ * success.
+ */
+export async function completeSpotifyAuth(
+  code: string,
+  returnedState?: string | null,
+): Promise<boolean> {
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
-  if (!verifier) return false;
+  const expectedState = sessionStorage.getItem(STATE_KEY);
   sessionStorage.removeItem(VERIFIER_KEY);
+  sessionStorage.removeItem(STATE_KEY);
+  if (!verifier) return false;
+  // If we issued a state, the redirect must echo it back exactly.
+  if (expectedState && returnedState !== expectedState) return false;
   try {
     await tokenRequest({
       grant_type: "authorization_code",

@@ -294,7 +294,7 @@ function VizPage() {
     const params = new URLSearchParams(location.search);
     const code = params.get("code");
     if (!code) return;
-    void completeSpotifyAuth(code).then(() => {
+    void completeSpotifyAuth(code, params.get("state")).then(() => {
       history.replaceState(null, "", "/viz");
       setSpotifyOpen(true);
     });

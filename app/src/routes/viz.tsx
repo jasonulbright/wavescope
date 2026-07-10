@@ -32,6 +32,7 @@ import {
   BUNDLED_MILK,
 } from "../lib/viz/projectm";
 import { WebGPUCanvas } from "../components/ws/WebGPUCanvas";
+import { ClipRecorder, downloadClip } from "../lib/viz/record";
 import { GPU_MODES, gpuModeById, webgpuSupported } from "../lib/viz/webgpu";
 import { attachPcmTap, PcmBroadcaster, PcmLink } from "../lib/viz/pcm";
 import { SpotifyPanel } from "../components/ws/SpotifyPanel";
@@ -46,6 +47,10 @@ interface VizSearch {
   mode?: string;
   palette?: string;
   follow?: 1;
+  /** Chromeless mode for OBS browser sources / iframes: no deck, no HUD. */
+  embed?: 1;
+  /** With embed: auto-arm this source on load. Only "demo" needs no gesture. */
+  src?: "demo";
 }
 
 export const Route = createFileRoute("/viz")({
@@ -54,6 +59,8 @@ export const Route = createFileRoute("/viz")({
     if (typeof s.mode === "string") out.mode = s.mode;
     if (typeof s.palette === "string") out.palette = s.palette;
     if (s.follow) out.follow = 1;
+    if (s.embed) out.embed = 1;
+    if (s.src === "demo") out.src = "demo";
     return out;
   },
   head: () => ({
@@ -69,13 +76,15 @@ export const Route = createFileRoute("/viz")({
   component: VizPage,
 });
 
-/** Shuffle timer choices, in seconds; 0 = off. */
+/** Shuffle timer choices, in seconds; 0 = off. A NEGATIVE value is auto-DJ:
+ * the tick hops ENGINE and mode/preset together (interval = abs(sec)). */
 const SHUFFLE_OPTIONS = [
   { sec: 0, label: "off" },
   { sec: 15, label: "15s" },
   { sec: 30, label: "30s" },
   { sec: 60, label: "1m" },
   { sec: 300, label: "5m" },
+  { sec: -30, label: "DJ" },
 ] as const;
 
 const SOURCE_BUTTONS: Array<{ kind: SourceKind; label: string; hint: string }> = [
@@ -88,6 +97,8 @@ const SOURCE_BUTTONS: Array<{ kind: SourceKind; label: string; hint: string }> =
 function VizPage() {
   const search = Route.useSearch();
   const follow = Boolean(search.follow);
+  // Chromeless embed (OBS overlays): all UI stays hidden, nothing to arm.
+  const embed = Boolean(search.embed) && !follow;
 
   const [ready, setReady] = useState(false);
   const [modeId, setModeId] = useState(() => modeById(search.mode).id);
@@ -97,6 +108,8 @@ function VizPage() {
   const [resId, setResId] = useState<ResolutionId>("auto");
   const [shuffleSec, setShuffleSec] = useState(0);
   const [calm, setCalm] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<ClipRecorder | null>(null);
   const [shufflePalettes, setShufflePalettes] = useState(false);
   /** Palette ids included in the shuffle; null means "all of them". */
   const [shuffleInclude, setShuffleInclude] = useState<string[] | null>(null);
@@ -613,11 +626,60 @@ function VizPage() {
     setMilkPreset(milkNames[0] ?? "");
   }, [milkPreset, milkNames]);
 
+  /** Auto-DJ: hop to a random engine that is ready to go, then a random
+   * mode/preset inside it. milkdrop joins the pool once its bundle has been
+   * loaded at least once (loading it from a timer would jank the show). */
+  const djHop = useCallback(() => {
+    const hops: Array<() => void> = [
+      () => {
+        setMilk(false);
+        setPm(false);
+        setGpu(false);
+        setModeId((cur) => {
+          const others = availableModes.filter((m) => m.id !== cur);
+          return others.length
+            ? others[Math.floor(Math.random() * others.length)].id
+            : cur;
+        });
+      },
+    ];
+    if (gpuAvailable) {
+      hops.push(() => {
+        setMilk(false);
+        setPm(false);
+        setGpu(true);
+        setGpuMode(GPU_MODES[Math.floor(Math.random() * GPU_MODES.length)].id);
+      });
+    }
+    if (pmAvailable && pmNames.length) {
+      hops.push(() => {
+        setMilk(false);
+        setGpu(false);
+        setPmPreset(pmNames[Math.floor(Math.random() * pmNames.length)]);
+        setPm(true);
+      });
+    }
+    if (milkNames.length && milkAll.length) {
+      hops.push(() => {
+        setPm(false);
+        setGpu(false);
+        setMilkPreset(milkAll[Math.floor(Math.random() * milkAll.length)]);
+        setMilk(true);
+      });
+    }
+    hops[Math.floor(Math.random() * hops.length)]();
+  }, [availableModes, gpuAvailable, pmAvailable, pmNames, milkNames, milkAll]);
+
   // Shuffle: hop to a random OTHER mode every shuffleSec seconds, and
-  // optionally to a random palette from the user's include list.
+  // optionally to a random palette from the user's include list. Negative
+  // interval = auto-DJ (engines hop too).
   useEffect(() => {
     if (!shuffleSec) return;
     const iv = setInterval(() => {
+      if (shuffleSec < 0) {
+        djHop();
+        return;
+      }
       if (gpu) {
         setGpuMode((cur) => {
           const others = GPU_MODES.filter((m) => m.id !== cur);
@@ -662,9 +724,9 @@ function VizPage() {
           return others[Math.floor(Math.random() * others.length)].id;
         });
       }
-    }, shuffleSec * 1000);
+    }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
-  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, pm, pmNames, gpu]);
+  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, pm, pmNames, gpu, djHop]);
 
   const cycleShuffle = useCallback(() => {
     setShuffleSec((cur) => {
@@ -690,6 +752,49 @@ function VizPage() {
     setDisplayCount((c) => c + n);
   }, []);
 
+  /** Record the live canvas (any engine) to a WebM download. */
+  const toggleRecord = useCallback(async () => {
+    if (!recorderRef.current) recorderRef.current = new ClipRecorder();
+    const rec = recorderRef.current;
+    if (rec.active) {
+      const blob = await rec.stop();
+      setRecording(false);
+      if (blob) {
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        downloadClip(blob, `wavescope-${stamp}.webm`);
+      }
+      return;
+    }
+    const canvas = rootRef.current?.querySelector("canvas");
+    if (!canvas) {
+      setError("Nothing to record yet — arm a source first.");
+      return;
+    }
+    try {
+      // Console records its engine; a linked companion records its PcmLink.
+      rec.start(canvas, follow ? linkRef.current : engineRef.current);
+      setRecording(true);
+    } catch {
+      setError("Recording is not supported in this browser.");
+    }
+  }, [follow]);
+
+  // Never leak capture tracks on unmount.
+  useEffect(() => {
+    return () => {
+      void recorderRef.current?.stop();
+    };
+  }, []);
+
+  // Embed autostart: arm the demo signal once, without any UI. (OBS runs
+  // browser sources with autoplay allowed, so no gesture is needed there.)
+  const embedArmed = useRef(false);
+  useEffect(() => {
+    if (!embed || search.src !== "demo" || !ready || source || embedArmed.current) return;
+    embedArmed.current = true;
+    void arm("demo");
+  }, [embed, search.src, ready, source, arm]);
+
   // Keyboard map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -710,7 +815,11 @@ function VizPage() {
           break;
         case "h":
         case "H":
-          setUiVisible((v) => !v);
+          if (!embed) setUiVisible((v) => !v);
+          break;
+        case "r":
+        case "R":
+          void toggleRecord();
           break;
         case "p":
         case "P":
@@ -732,17 +841,22 @@ function VizPage() {
           setHelpOpen((v) => !v);
           break;
         case "Escape":
-          setUiVisible(true);
+          if (!embed) setUiVisible(true);
           setHelpOpen(false);
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, toggleRecord]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
+    if (embed) {
+      // Chromeless embed: the UI never shows at all.
+      setUiVisible(false);
+      return;
+    }
     const onMove = () => {
       setUiVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -756,9 +870,9 @@ function VizPage() {
       window.removeEventListener("pointermove", onMove);
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [source, follow]);
+  }, [source, follow, embed]);
 
-  const needsArming = ready && !follow && !source;
+  const needsArming = ready && !follow && !source && !embed;
 
   const hud = useMemo(
     () =>
@@ -786,12 +900,13 @@ function VizPage() {
           ? `SHUFFLE ${SHUFFLE_OPTIONS.find((o) => o.sec === shuffleSec)?.label}${shufflePalettes && !milk && !pm && !gpu ? " +PAL" : ""}`
           : null,
         calm && !milk && !pm && !gpu ? "CALM ON" : null,
+        recording ? "● REC" : null,
         nowPlaying
           ? `PLAYING ${`${nowPlaying.title} / ${nowPlaying.artist}`.slice(0, 42).toUpperCase()}`
           : null,
         `FPS ${fps}`,
       ].filter(Boolean),
-    [follow, receiverLive, linked, pcmLive, source, mode.name, canvasSize, shuffleSec, shufflePalettes, calm, fps, milk, milkPreset, pm, pmPreset, gpu, gpuMode, nowPlaying],
+    [follow, receiverLive, linked, pcmLive, source, mode.name, canvasSize, shuffleSec, shufflePalettes, calm, recording, fps, milk, milkPreset, pm, pmPreset, gpu, gpuMode, nowPlaying],
   );
 
   const milkAudio = follow ? linkRef.current : engineRef.current;
@@ -1294,6 +1409,17 @@ function VizPage() {
               </button>
             ) : null}
             <button
+              onClick={() => void toggleRecord()}
+              title="Record the canvas (with the analysed audio) to a WebM clip"
+              className={`border px-3 py-1.5 font-meter text-xs transition-colors active:scale-[0.97] ${
+                recording
+                  ? "border-ultra bg-ultra/20 text-ultra-soft"
+                  : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+              }`}
+            >
+              {recording ? "stop rec (R)" : "rec (R)"}
+            </button>
+            <button
               onClick={toggleFullscreen}
               className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
             >
@@ -1351,6 +1477,7 @@ function VizPage() {
               {[
                 ["Space / →", "next visualizer"],
                 ["←", "previous visualizer"],
+                ["R", "record a clip"],
                 ["F", "fullscreen"],
                 ["H", "hide or show controls"],
                 ["P", "cycle trace palette"],

@@ -36,7 +36,7 @@ Live at [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com) â
 | Route | What it is |
 |---|---|
 | `/` | Landing page. The hero is a live particle instrument running the real engine (demo signal, cursor pressure, optional microphone). The gallery renders all 34 modes as live canvases. |
-| `/viz` | The console: the visualizer itself. Arm a source, pick a mode, go fullscreen. `?mode=<id>` deep-links a mode; `?follow=1` starts a companion display window. |
+| `/viz` | The console: the visualizer itself. Arm a source, pick a mode, go fullscreen. `?mode=<id>` deep-links a mode; `?follow=1` starts a companion display window; `?embed=1&src=demo` is chromeless (no deck, no HUD) for OBS browser sources and iframes. |
 | `/docs` | The manual: signals (incl. Spotify), all three engines, resolution, multi-display, shortcuts, browser support, the math. |
 
 ## Architecture

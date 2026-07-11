@@ -6,12 +6,13 @@
  * Why not analyze Spotify's stream directly: Web Playback SDK audio is DRM
  * protected and cannot be tapped by the Web Audio API, and Spotify removed
  * its precomputed audio-analysis endpoints for new apps in late 2024.
- * Loopback capture is the legitimate, working path.
+ * Capturing the system audio is the working path.
  *
- * Auth is Authorization Code + PKCE, entirely client-side (no secret). A
- * default app client ID ships baked in (public and safe under PKCE); a listener
- * can override it with their own in the Connect panel. Tokens stay in the
- * browser. Playback control requires Spotify Premium (a Spotify rule).
+ * Sign-in is the Authorization Code flow with a code challenge, entirely
+ * client-side (no app secret). A default client ID ships baked in (it's public
+ * and fine to embed); a listener can override it with their own in the Connect
+ * panel. Login stays in the browser. Playback control requires Spotify Premium
+ * (a Spotify rule).
  */
 
 const STORE_KEY = "wavescope-spotify";
@@ -20,8 +21,8 @@ const STATE_KEY = "wavescope-spotify-state";
 const SCOPES = "user-modify-playback-state user-read-playback-state";
 
 /**
- * Baked-in Spotify app client ID. A client ID is public under PKCE (it rides in
- * the browser's authorize URL), so shipping it is safe. Forks can override it by
+ * Baked-in Spotify app client ID. A client ID is public (it rides in the
+ * browser's authorize URL), so shipping it is fine. Forks can override it by
  * defining VITE_SPOTIFY_CLIENT_ID at build time; a listener can override it per
  * session via the Connect panel's "advanced" field.
  */
@@ -87,8 +88,8 @@ export async function beginSpotifyAuth(
   const challenge = base64url(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
   );
-  // CSRF defense-in-depth alongside PKCE: a random `state` echoed back and
-  // checked on return, matching the native sibling's flow.
+  // A random `state` echoed back and checked on return, so an unexpected
+  // redirect is ignored. Matches the native sibling's flow.
   const stateBytes = new Uint8Array(16);
   crypto.getRandomValues(stateBytes);
   const state = base64url(stateBytes.buffer);
@@ -129,8 +130,7 @@ async function tokenRequest(body: Record<string, string>): Promise<void> {
 
 /**
  * Call on /viz load when ?code= is present. Pass the returned ?state= so it can
- * be checked against the value we stored before the redirect (CSRF). True on
- * success.
+ * be checked against the value we stored before the redirect. True on success.
  */
 export async function completeSpotifyAuth(
   code: string,

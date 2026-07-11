@@ -7,7 +7,7 @@
  *    console keeps opening with no connection at all.
  *
  * Bump VERSION to invalidate everything after a breaking asset change.
- * (v2 purges v1 caches that could hold rewrite-poisoned entries.)
+ * (v2 purges v1 caches that could hold stale rewritten entries.)
  */
 const VERSION = "ws-v2";
 const SHELL = "/index.html";
@@ -15,8 +15,8 @@ const SHELL = "/index.html";
 /**
  * Only cache what the URL claims to be. The host rewrites EVERY unknown path
  * to the HTML shell with a 200 — during a deploy race an asset URL can answer
- * text/html, and caching that poisons the engine loaders (a .js that is
- * secretly index.html). Navigations are the only requests allowed to store
+ * text/html, and caching that would break the engine loaders (a .js that is
+ * actually index.html). Navigations are the only requests allowed to store
  * HTML.
  */
 function okToCache(req, res) {

@@ -128,11 +128,10 @@ effects; nothing touches `window` during render.
   `WebGPUCanvas.tsx` drives it; gated on `navigator.gpu`.
 
 - **`spotify.ts`** — Spotify integration (`SpotifyPanel.tsx`): a quick path
-  (open Spotify, capture system audio) and a connected path (Authorization
-  Code + PKCE, entirely client-side, user's own client ID) where a button
-  starts playback on the user's device remotely. Capture is still via system
-  loopback (Spotify's stream is DRM-protected); the now-playing track shows
-  in the HUD.
+  (open Spotify, capture system audio) and a connected path (the sign-in flow,
+  entirely client-side, user's own client ID) where a button starts playback
+  on the user's device remotely. Capture is still via system loopback
+  (Spotify's stream is DRM-protected); the now-playing track shows in the HUD.
 
 ### Rendering (`app/src/components/ws/`)
 

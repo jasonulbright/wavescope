@@ -1471,7 +1471,10 @@ function VizPage() {
       {/* Shortcuts overlay. */}
       {helpOpen ? (
         <HelpOverlay onClose={() => setHelpOpen(false)}>
-          <div className="w-full max-w-md border border-white/15 bg-scope p-8">
+          <div
+            className="w-full max-w-md border border-white/15 bg-scope p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <p className="readout text-ultra-soft">SHORTCUTS</p>
             <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 font-meter text-sm">
               {[

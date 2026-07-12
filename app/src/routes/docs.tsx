@@ -240,12 +240,12 @@ function DocsPage() {
 
           <H3>The morph deck</H3>
           <P>
-            Next to the lab, the <em>MORPH</em> row holds two preset slots and
-            a blend-length slider (0.5–10 seconds). The arrow buttons crossfade
-            the console to a slot's preset over that length using MilkDrop's
-            own blend — set a long blend for slow scene changes, a short one
-            for cuts. The picker and shuffle keep working; morphing just gives
-            you a rehearsed transition between two presets you chose.
+            Next to the lab, the <em>MORPH</em> row holds a target preset and
+            a blend-length slider (0.5–10 seconds). The <em>morph</em> button
+            crossfades from whatever is playing to the target over that length
+            using MilkDrop's own blend — set a long blend for slow scene
+            changes, a short one for cuts. The main picker follows the morph,
+            so afterwards you can pick the next target and go again.
           </P>
 
           <H3>projectM: raw .milk presets</H3>

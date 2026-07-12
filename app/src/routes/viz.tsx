@@ -143,9 +143,9 @@ function VizPage() {
   }, [milk]);
   // One-shot blend override consumed by the canvas on the next preset switch.
   const milkBlendRef = useRef<number | null>(null);
-  // Morph deck: two preset slots and the blend length between them.
-  const [morphA, setMorphA] = useState("");
-  const [morphB, setMorphB] = useState("");
+  // Morph deck: a target preset and the blend length to reach it. The
+  // "from" side is always whatever is playing, which the picker shows.
+  const [morphTarget, setMorphTarget] = useState("");
   const [morphSec, setMorphSec] = useState(2.7);
   // projectM (WASM MilkDrop): a separate engine that runs raw .milk presets.
   const [pm, setPm] = useState(false);
@@ -511,9 +511,8 @@ function VizPage() {
       const bundle = await loadMilkdrop();
       milkBundleRef.current = bundle;
       setMilkNames(bundle.presetNames);
-      // Seed the morph slots once the pack is known.
-      setMorphA((cur) => cur || bundle.presetNames[0]);
-      setMorphB(
+      // Seed the morph target once the pack is known.
+      setMorphTarget(
         (cur) =>
           cur ||
           bundle.presetNames[Math.floor(Math.random() * bundle.presetNames.length)],
@@ -658,19 +657,16 @@ function VizPage() {
     [customMilk],
   );
 
-  /** Morph deck: blend to a slot's preset over the chosen length. The blend
-   * override is only armed when a switch actually happens, so it cannot leak
-   * onto a later unrelated preset change; a slot naming a preset that no
-   * longer exists is a no-op. */
-  const morphTo = useCallback(
-    (slot: "A" | "B") => {
-      const target = slot === "A" ? morphA : morphB;
-      if (!target || target === milkPreset || !milkAll.includes(target)) return;
-      milkBlendRef.current = morphSec;
-      setMilkPreset(target);
-    },
-    [morphA, morphB, morphSec, milkPreset, milkAll],
-  );
+  /** Morph deck: blend from the playing preset to the target over the
+   * chosen length. The blend override is only armed when a switch actually
+   * happens, so it cannot leak onto a later unrelated preset change; a
+   * target naming a preset that no longer exists is a no-op. */
+  const morphTo = useCallback(() => {
+    if (!morphTarget || morphTarget === milkPreset || !milkAll.includes(morphTarget))
+      return;
+    milkBlendRef.current = morphSec;
+    setMilkPreset(morphTarget);
+  }, [morphTarget, morphSec, milkPreset, milkAll]);
 
   const deleteMilkPreset = useCallback(() => {
     setCustomMilk((cur) => {
@@ -680,10 +676,9 @@ function VizPage() {
       return next;
     });
     // Point every reference to the deleted name somewhere real: the picker
-    // and the morph slots would otherwise hold a value their option lists
+    // and the morph target would otherwise hold a value their option lists
     // no longer contain.
-    setMorphA((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
-    setMorphB((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
+    setMorphTarget((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
     setMilkPreset(milkNames[0] ?? "");
   }, [milkPreset, milkNames]);
 
@@ -1494,10 +1489,10 @@ function VizPage() {
               <div className="flex items-center gap-1.5">
                 <span className="readout mr-1 text-white/40">MORPH</span>
                 <select
-                  value={morphA}
-                  onChange={(e) => setMorphA(e.target.value)}
-                  aria-label="Morph slot A"
-                  className="max-w-36 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
+                  value={morphTarget}
+                  onChange={(e) => setMorphTarget(e.target.value)}
+                  aria-label="Morph target preset"
+                  className="max-w-48 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
                 >
                   {milkAll.map((n) => (
                     <option key={n} value={n}>
@@ -1505,14 +1500,6 @@ function VizPage() {
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => morphTo("A")}
-                  title="Blend to slot A over the morph length"
-                  aria-label="Blend to slot A over the morph length"
-                  className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
-                >
-                  ←A
-                </button>
                 <input
                   type="range"
                   min={0.5}
@@ -1525,25 +1512,13 @@ function VizPage() {
                 />
                 <span className="w-8 font-meter text-xs text-white/40">{morphSec}s</span>
                 <button
-                  onClick={() => morphTo("B")}
-                  title="Blend to slot B over the morph length"
-                  aria-label="Blend to slot B over the morph length"
-                  className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+                  onClick={morphTo}
+                  title="Blend from the playing preset to the target over the morph length"
+                  aria-label="Blend from the playing preset to the target over the morph length"
+                  className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
                 >
-                  B→
+                  morph
                 </button>
-                <select
-                  value={morphB}
-                  onChange={(e) => setMorphB(e.target.value)}
-                  aria-label="Morph slot B"
-                  className="max-w-36 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
-                >
-                  {milkAll.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
               </div>
             </>
           ) : null}

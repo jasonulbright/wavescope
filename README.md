@@ -178,9 +178,9 @@ M displays, L preset lab, ? overlay).
 While the MilkDrop engine is active the deck adds two instruments: the
 **preset lab** (edit the active preset's init / per-frame / per-pixel eel
 source and recompile it live; save the edit as a custom preset or export
-the JSON) and the **morph deck** (two preset slots with a 0.5–10 s blend
-length; the arrows crossfade the console between them using the engine's
-own blend).
+the JSON) and the **morph deck** (a target preset and a 0.5–10 s blend length;
+one press crossfades the console from the playing preset to the target
+using the engine's own blend).
 
 ## Design system
 

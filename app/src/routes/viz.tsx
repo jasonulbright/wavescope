@@ -145,6 +145,7 @@ function VizPage() {
   const milkBlendRef = useRef<number | null>(null);
   // Morph deck: a target preset and the blend length to reach it. The
   // "from" side is always whatever is playing, which the picker shows.
+  // "" is the shuffle target (the default): morph to a random other preset.
   const [morphTarget, setMorphTarget] = useState("");
   const [morphSec, setMorphSec] = useState(2.7);
   // projectM (WASM MilkDrop): a separate engine that runs raw .milk presets.
@@ -511,12 +512,6 @@ function VizPage() {
       const bundle = await loadMilkdrop();
       milkBundleRef.current = bundle;
       setMilkNames(bundle.presetNames);
-      // Seed the morph target once the pack is known.
-      setMorphTarget(
-        (cur) =>
-          cur ||
-          bundle.presetNames[Math.floor(Math.random() * bundle.presetNames.length)],
-      );
       setMilkPreset(
         (cur) =>
           cur ||
@@ -658,12 +653,21 @@ function VizPage() {
   );
 
   /** Morph deck: blend from the playing preset to the target over the
-   * chosen length. The blend override is only armed when a switch actually
-   * happens, so it cannot leak onto a later unrelated preset change; a
-   * target naming a preset that no longer exists is a no-op. */
+   * chosen length — or to a random other preset while the target sits on
+   * shuffle (the default). The blend override is only armed when a switch
+   * actually happens, so it cannot leak onto a later unrelated preset
+   * change; a named target that no longer exists is a no-op. */
   const morphTo = useCallback(() => {
-    if (!morphTarget || morphTarget === milkPreset || !milkAll.includes(morphTarget))
+    if (morphTarget === "") {
+      setMilkPreset((cur) => {
+        const others = milkAll.filter((n) => n !== cur);
+        if (!others.length) return cur;
+        milkBlendRef.current = morphSec;
+        return others[Math.floor(Math.random() * others.length)];
+      });
       return;
+    }
+    if (morphTarget === milkPreset || !milkAll.includes(morphTarget)) return;
     milkBlendRef.current = morphSec;
     setMilkPreset(morphTarget);
   }, [morphTarget, morphSec, milkPreset, milkAll]);
@@ -676,9 +680,9 @@ function VizPage() {
       return next;
     });
     // Point every reference to the deleted name somewhere real: the picker
-    // and the morph target would otherwise hold a value their option lists
-    // no longer contain.
-    setMorphTarget((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
+    // falls back to the first bundled preset, the morph target back to
+    // shuffle.
+    setMorphTarget((cur) => (cur === milkPreset ? "" : cur));
     setMilkPreset(milkNames[0] ?? "");
   }, [milkPreset, milkNames]);
 
@@ -755,12 +759,13 @@ function VizPage() {
         return;
       }
       if (milk && milkAll.length) {
-        // MilkDrop engine: shuffle hops presets; palettes are the preset's own.
+        // MilkDrop engine: shuffle hops presets; palettes are the preset's
+        // own. Transitions use the morph deck's blend length.
         setMilkPreset((cur) => {
           const others = milkAll.filter((n) => n !== cur);
-          return others.length
-            ? others[Math.floor(Math.random() * others.length)]
-            : cur;
+          if (!others.length) return cur;
+          milkBlendRef.current = morphSec;
+          return others[Math.floor(Math.random() * others.length)];
         });
         return;
       }
@@ -782,7 +787,7 @@ function VizPage() {
       }
     }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
-  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, pm, pmNames, gpu, djHop]);
+  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, morphSec, pm, pmNames, gpu, djHop]);
 
   // Auto-VJ: audio-driven switching instead of a timer. Bass energy feeds a
   // fast and a slow envelope; the fast one spiking over the slow one is a
@@ -1494,6 +1499,7 @@ function VizPage() {
                   aria-label="Morph target preset"
                   className="max-w-48 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
                 >
+                  <option value="">shuffle</option>
                   {milkAll.map((n) => (
                     <option key={n} value={n}>
                       {n}

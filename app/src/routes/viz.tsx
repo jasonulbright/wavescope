@@ -21,12 +21,14 @@ import { useFocusTrap } from "../hooks/use-focus-trap";
 import { WorkerCanvas, workerCanvasSupported } from "../components/ws/WorkerCanvas";
 import type { PaletteRef } from "../lib/viz/render-worker";
 import { MilkdropCanvas, type MilkdropApi } from "../components/ws/MilkdropCanvas";
+import { PresetLab } from "../components/ws/PresetLab";
 import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
   loadCustomMilkPresets,
   saveCustomMilkPresets,
   isLegacyJsPreset,
+  type MilkdropBundle,
 } from "../lib/viz/milkdrop";
 import {
   loadProjectM,
@@ -125,6 +127,9 @@ function VizPage() {
   const milkFileRef = useRef<HTMLInputElement>(null);
   // Imperative preset surface of the live MilkdropCanvas (lab + morph deck).
   const milkApiRef = useRef<MilkdropApi | null>(null);
+  // Loaded engine bundle: the lab reads preset objects from it by name.
+  const milkBundleRef = useRef<MilkdropBundle | null>(null);
+  const [labOpen, setLabOpen] = useState(false);
   // projectM (WASM MilkDrop): a separate engine that runs raw .milk presets.
   const [pm, setPm] = useState(false);
   const [pmAvailable, setPmAvailable] = useState<boolean | null>(null);
@@ -487,6 +492,7 @@ function VizPage() {
     setError(null);
     try {
       const bundle = await loadMilkdrop();
+      milkBundleRef.current = bundle;
       setMilkNames(bundle.presetNames);
       setMilkPreset(
         (cur) =>
@@ -808,7 +814,11 @@ function VizPage() {
   // Keyboard map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLSelectElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
         return;
       switch (e.key) {
         case " ":
@@ -847,18 +857,23 @@ function VizPage() {
         case "M":
           if (!follow) void openDisplays();
           break;
+        case "l":
+        case "L":
+          if (!embed && milk) setLabOpen((v) => !v);
+          break;
         case "?":
           setHelpOpen((v) => !v);
           break;
         case "Escape":
           if (!embed) setUiVisible(true);
           setHelpOpen(false);
+          setLabOpen(false);
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, toggleRecord]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1341,6 +1356,19 @@ function VizPage() {
                   remove
                 </button>
               ) : null}
+              {!embed ? (
+                <button
+                  onClick={() => setLabOpen((v) => !v)}
+                  title="Edit this preset's eel equations live (L)"
+                  className={`border px-3 py-1.5 font-meter text-xs transition-colors active:scale-[0.97] ${
+                    labOpen
+                      ? "border-ultra bg-ultra/20 text-ultra-soft"
+                      : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+                  }`}
+                >
+                  lab (L)
+                </button>
+              ) : null}
             </>
           ) : null}
 
@@ -1450,6 +1478,28 @@ function VizPage() {
         </div>
       </div>
 
+      {/* Preset lab: live eel editing for the active MilkDrop preset. */}
+      {labOpen && milk && !embed ? (
+        <PresetLab
+          presetName={milkPreset}
+          base={customMilk[milkPreset] ?? milkBundleRef.current?.presets[milkPreset] ?? null}
+          onApply={(edited) =>
+            milkApiRef.current
+              ? milkApiRef.current.applyPreset(edited, 0)
+              : Promise.reject(new Error("The engine is not running; arm a source first."))
+          }
+          onSaveAs={(name, preset) => {
+            setCustomMilk((cur) => {
+              const next = { ...cur, [name]: preset };
+              saveCustomMilkPresets(next);
+              return next;
+            });
+            setMilkPreset(name);
+          }}
+          onClose={() => setLabOpen(false)}
+        />
+      ) : null}
+
       {/* Spotify overlay. */}
       {spotifyOpen ? (
         <SpotifyPanel
@@ -1498,6 +1548,7 @@ function VizPage() {
                 ["S", "cycle shuffle timer"],
                 ["C", "toggle calm mode"],
                 ["M", "open companion displays"],
+                ["L", "preset lab (MilkDrop engine)"],
                 ["?", "this overlay"],
                 ["Esc", "show controls"],
               ].map(([k, d]) => (

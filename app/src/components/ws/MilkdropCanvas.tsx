@@ -24,6 +24,8 @@ const LEGACY_PRESET_MESSAGE =
   "This preset carries compiled-JS equations (old converter); the engine runs eel-source presets only.";
 const NOT_EEL_MESSAGE =
   "This file has no eel equations; it is not a Butterchurn preset.";
+const RESTARTED_MESSAGE =
+  "The engine restarted before this preset applied; try again.";
 
 interface MilkdropCanvasProps {
   /** Console AudioEngine or a companion's PcmLink; both expose the graph. */
@@ -78,10 +80,11 @@ export function MilkdropCanvas({
 
   const applyPreset = useCallback((preset: unknown, blendSec: number) => {
     // Bind the visualizer at submission time: an entry queued for a
-    // torn-down generation drops instead of loading into its successor.
+    // torn-down generation rejects instead of loading into its successor
+    // (or silently reporting success for a load that never happened).
     const viz = vizRef.current;
     const run = loadQueueRef.current.then(() => {
-      if (!viz || vizRef.current !== viz) return;
+      if (!viz || vizRef.current !== viz) throw new Error(RESTARTED_MESSAGE);
       if (!isLoadablePreset(preset)) {
         throw new Error(
           isLegacyJsPreset(preset) ? LEGACY_PRESET_MESSAGE : NOT_EEL_MESSAGE,
@@ -247,15 +250,20 @@ export function MilkdropCanvas({
   // Preset switches blend in place, 2.7s crossfade like classic MilkDrop.
   useEffect(() => {
     presetRef.current = presetName;
+    // Consume the one-shot blend override on every switch attempt — even
+    // one that bails below — so it can never leak onto a later change.
+    const blend = blendSecRef?.current ?? 2.7;
+    if (blendSecRef) blendSecRef.current = null;
     const bundle = bundleRef.current;
     if (!vizRef.current || !bundle) return;
     const preset = extraRef.current?.[presetName] ?? bundle.presets[presetName];
     if (!preset) return;
-    const blend = blendSecRef?.current ?? 2.7;
-    if (blendSecRef) blendSecRef.current = null;
     let stale = false;
     applyPreset(preset, blend).catch((e) => {
-      if (!stale) onPresetErrorRef.current?.(presetErrorMessage(e));
+      // A visualizer restart re-applies presetRef.current itself; only
+      // surface real load failures.
+      if (!stale && !(e instanceof Error && e.message === RESTARTED_MESSAGE))
+        onPresetErrorRef.current?.(presetErrorMessage(e));
     });
     return () => {
       stale = true;

@@ -65,15 +65,16 @@ export function PresetLab({
   const [status, setStatus] = useState<LabStatus>({ kind: "idle" });
   const busyRef = useRef(false);
 
-  // Re-seed the editor whenever the picked preset changes.
+  // Re-seed the editor whenever the picked preset changes — by name OR by
+  // object identity, so re-importing a file under the open preset's name
+  // refreshes the textareas instead of leaving stale eel to overwrite it.
   useEffect(() => {
     const next: Record<string, string> = {};
     for (const f of EEL_FIELDS) next[f.key] = eelField(base, f.key);
     setEqs(next);
     setName(`${presetName} (edit)`);
     setStatus({ kind: "idle" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presetName]);
+  }, [presetName, base]);
 
   const apply = () => {
     if (busyRef.current) return;

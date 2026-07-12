@@ -655,15 +655,16 @@ function VizPage() {
 
   /** Morph deck: blend to a slot's preset over the chosen length. The blend
    * override is only armed when a switch actually happens, so it cannot leak
-   * onto a later unrelated preset change. */
+   * onto a later unrelated preset change; a slot naming a preset that no
+   * longer exists is a no-op. */
   const morphTo = useCallback(
     (slot: "A" | "B") => {
       const target = slot === "A" ? morphA : morphB;
-      if (!target || target === milkPreset) return;
+      if (!target || target === milkPreset || !milkAll.includes(target)) return;
       milkBlendRef.current = morphSec;
       setMilkPreset(target);
     },
-    [morphA, morphB, morphSec, milkPreset],
+    [morphA, morphB, morphSec, milkPreset, milkAll],
   );
 
   const deleteMilkPreset = useCallback(() => {
@@ -673,6 +674,11 @@ function VizPage() {
       saveCustomMilkPresets(next);
       return next;
     });
+    // Point every reference to the deleted name somewhere real: the picker
+    // and the morph slots would otherwise hold a value their option lists
+    // no longer contain.
+    setMorphA((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
+    setMorphB((cur) => (cur === milkPreset ? (milkNames[0] ?? "") : cur));
     setMilkPreset(milkNames[0] ?? "");
   }, [milkPreset, milkNames]);
 
@@ -786,6 +792,7 @@ function VizPage() {
     if (shuffleSec !== VJ_SEC) return;
     let slow = 0;
     let fast = 0;
+    let seeded = false;
     let lastSwitch = performance.now();
     const HOLD_MS = 8000; // minimum time between switches
     const LULL_MS = 45000; // no drop for this long → gentle morph
@@ -828,6 +835,16 @@ function VizPage() {
     };
     const iv = setInterval(() => {
       const f = getFrame();
+      // Seed both envelopes at the current level on the first tick: the
+      // ratio starts at 1 and only diverges on a real transient. Without
+      // this, steady bass reads as a "drop" the moment the hold expires,
+      // because the slow envelope converges slower than the hold time.
+      if (!seeded) {
+        slow = f.bass;
+        fast = f.bass;
+        seeded = true;
+        return;
+      }
       slow = slow * 0.985 + f.bass * 0.015; // ~10 s memory at this tick rate
       fast = fast * 0.6 + f.bass * 0.4; // ~0.5 s
       const held = performance.now() - lastSwitch;
@@ -1486,6 +1503,7 @@ function VizPage() {
                 <button
                   onClick={() => morphTo("A")}
                   title="Blend to slot A over the morph length"
+                  aria-label="Blend to slot A over the morph length"
                   className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
                 >
                   ←A
@@ -1504,6 +1522,7 @@ function VizPage() {
                 <button
                   onClick={() => morphTo("B")}
                   title="Blend to slot B over the morph length"
+                  aria-label="Blend to slot B over the morph length"
                   className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
                 >
                   B→

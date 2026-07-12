@@ -51,6 +51,12 @@ export function MilkdropCanvas({
     // Held so teardown can unwire the audio edge (which otherwise pins the
     // visualizer + its WebGL context to the session-long analyser).
     let connectedNode: AudioNode | null = null;
+    // Held so teardown can disconnect it: the observer outlives the render
+    // loop (reduced-motion never starts one), and cleanup cancels the rAF
+    // tick that would otherwise notice `disposed`. Detaching the canvas fires
+    // one final zero-size callback — without the disconnect that call would
+    // resize a visualizer whose GL context was just force-lost.
+    let ro: ResizeObserver | null = null;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const size = (): [number, number] => {
@@ -92,7 +98,7 @@ export function MilkdropCanvas({
         vizRef.current = viz;
         onSize?.(`${w}x${h}`);
 
-        const ro = new ResizeObserver(() => {
+        ro = new ResizeObserver(() => {
           const [nw, nh] = size();
           if (canvas.width !== nw || canvas.height !== nh) {
             canvas.width = nw;
@@ -110,10 +116,7 @@ export function MilkdropCanvas({
 
         fpsWindowStart = performance.now();
         const loop = (now: number) => {
-          if (disposed) {
-            ro.disconnect();
-            return;
-          }
+          if (disposed) return;
           raf = requestAnimationFrame(loop);
           viz.render();
           frames++;
@@ -132,6 +135,7 @@ export function MilkdropCanvas({
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      ro?.disconnect();
       // Unwire the audio edge and release the WebGL context, so switching
       // engines doesn't accumulate butterchurn contexts until the browser
       // force-loses the oldest (~16) and MilkDrop goes black. ProjectMCanvas

@@ -43,6 +43,12 @@ export function ProjectMCanvas({
     let frames = 0;
     let fpsWindowStart = 0;
     let engine: ProjectMEngine | null = null;
+    // Held so React cleanup can disconnect it: the observer outlives the
+    // render loop (reduced-motion never starts one), and cleanup cancels the
+    // rAF tick that would otherwise notice `disposed`. Detaching the canvas
+    // fires one final zero-size callback — without the disconnect that call
+    // would resize a destroyed engine.
+    let ro: ResizeObserver | null = null;
 
     const backingSize = (): [number, number] => {
       const rect = canvas.getBoundingClientRect();
@@ -82,7 +88,7 @@ export function ProjectMCanvas({
         if (presetRef.current) eng.loadPresetText(presetRef.current, false);
         onSize?.(`${canvas.width}x${canvas.height}`);
 
-        const ro = new ResizeObserver(() => {
+        ro = new ResizeObserver(() => {
           const [w, h] = backingSize();
           if (canvas.width !== w || canvas.height !== h) {
             canvas.width = w;
@@ -94,10 +100,7 @@ export function ProjectMCanvas({
         ro.observe(canvas);
 
         const loop = (now: number) => {
-          if (disposed) {
-            ro.disconnect();
-            return;
-          }
+          if (disposed) return;
           raf = requestAnimationFrame(loop);
           eng.feed(audio);
           eng.render();
@@ -123,6 +126,7 @@ export function ProjectMCanvas({
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      ro?.disconnect();
       engine?.destroy();
       engineRef.current = null;
     };

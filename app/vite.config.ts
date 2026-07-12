@@ -4,13 +4,15 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   // Bundle all npm deps into the SSR build output. TanStack Start ships a single
   // server bundle (used here only to prerender the static shell), so leaving deps
   // external (h3, react, @tanstack/*, seroval, …) would throw "No such module".
-  // (node: builtins stay external — the runtime provides them.)
+  // (node: builtins stay external — the runtime provides them.) Build only: the
+  // dev module runner loads external deps with require, and inlining them there
+  // evaluates React's CommonJS entry as ESM ("module is not defined").
   ssr: {
-    noExternal: true,
+    noExternal: command === "build" ? true : [],
   },
   plugins: [
     // TanStack Start must run before React's plugin. SPA mode: `vite build`
@@ -36,4 +38,4 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
-});
+}));

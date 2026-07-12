@@ -650,15 +650,17 @@ function VizPage() {
     [customMilk],
   );
 
-  /** Morph deck: blend to a slot's preset over the chosen length. */
+  /** Morph deck: blend to a slot's preset over the chosen length. The blend
+   * override is only armed when a switch actually happens, so it cannot leak
+   * onto a later unrelated preset change. */
   const morphTo = useCallback(
     (slot: "A" | "B") => {
       const target = slot === "A" ? morphA : morphB;
-      if (!target) return;
+      if (!target || target === milkPreset) return;
       milkBlendRef.current = morphSec;
-      setMilkPreset((cur) => (target === cur ? cur : target));
+      setMilkPreset(target);
     },
-    [morphA, morphB, morphSec],
+    [morphA, morphB, morphSec, milkPreset],
   );
 
   const deleteMilkPreset = useCallback(() => {
@@ -787,12 +789,12 @@ function VizPage() {
     const hop = (blendSec: number) => {
       lastSwitch = performance.now();
       if (milk && milkAll.length) {
-        milkBlendRef.current = blendSec;
         setMilkPreset((cur) => {
           const others = milkAll.filter((n) => n !== cur);
-          return others.length
-            ? others[Math.floor(Math.random() * others.length)]
-            : cur;
+          if (!others.length) return cur;
+          // Arm the one-shot blend only when a switch really happens.
+          milkBlendRef.current = blendSec;
+          return others[Math.floor(Math.random() * others.length)];
         });
         return;
       }
@@ -827,7 +829,9 @@ function VizPage() {
       fast = fast * 0.6 + f.bass * 0.4; // ~0.5 s
       const held = performance.now() - lastSwitch;
       if (held < HOLD_MS) return;
-      if (fast > slow * 1.5 && fast > 0.18) {
+      // The slow floor keeps the detector quiet until the envelope has
+      // actually integrated some signal (silence or a fresh arm).
+      if (slow > 0.04 && fast > slow * 1.5 && fast > 0.18) {
         hop(0); // drop: hard cut
         return;
       }

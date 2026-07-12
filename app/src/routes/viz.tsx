@@ -130,6 +130,12 @@ function VizPage() {
   // Loaded engine bundle: the lab reads preset objects from it by name.
   const milkBundleRef = useRef<MilkdropBundle | null>(null);
   const [labOpen, setLabOpen] = useState(false);
+  // One-shot blend override consumed by the canvas on the next preset switch.
+  const milkBlendRef = useRef<number | null>(null);
+  // Morph deck: two preset slots and the blend length between them.
+  const [morphA, setMorphA] = useState("");
+  const [morphB, setMorphB] = useState("");
+  const [morphSec, setMorphSec] = useState(2.7);
   // projectM (WASM MilkDrop): a separate engine that runs raw .milk presets.
   const [pm, setPm] = useState(false);
   const [pmAvailable, setPmAvailable] = useState<boolean | null>(null);
@@ -494,6 +500,13 @@ function VizPage() {
       const bundle = await loadMilkdrop();
       milkBundleRef.current = bundle;
       setMilkNames(bundle.presetNames);
+      // Seed the morph slots once the pack is known.
+      setMorphA((cur) => cur || bundle.presetNames[0]);
+      setMorphB(
+        (cur) =>
+          cur ||
+          bundle.presetNames[Math.floor(Math.random() * bundle.presetNames.length)],
+      );
       setMilkPreset(
         (cur) =>
           cur ||
@@ -630,6 +643,17 @@ function VizPage() {
       }
     },
     [customMilk],
+  );
+
+  /** Morph deck: blend to a slot's preset over the chosen length. */
+  const morphTo = useCallback(
+    (slot: "A" | "B") => {
+      const target = slot === "A" ? morphA : morphB;
+      if (!target) return;
+      milkBlendRef.current = morphSec;
+      setMilkPreset((cur) => (target === cur ? cur : target));
+    },
+    [morphA, morphB, morphSec],
   );
 
   const deleteMilkPreset = useCallback(() => {
@@ -981,6 +1005,7 @@ function VizPage() {
           extraPresets={customMilk}
           resolutionHeight={resolution.height}
           apiRef={milkApiRef}
+          blendSecRef={milkBlendRef}
           onPresetError={setError}
           onFps={setFps}
           onSize={setCanvasSize}
@@ -1369,6 +1394,58 @@ function VizPage() {
                   lab (L)
                 </button>
               ) : null}
+              <div className="flex items-center gap-1.5">
+                <span className="readout mr-1 text-white/40">MORPH</span>
+                <select
+                  value={morphA}
+                  onChange={(e) => setMorphA(e.target.value)}
+                  aria-label="Morph slot A"
+                  className="max-w-36 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
+                >
+                  {milkAll.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => morphTo("A")}
+                  title="Blend to slot A over the morph length"
+                  className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+                >
+                  ←A
+                </button>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  value={morphSec}
+                  onChange={(e) => setMorphSec(Number(e.target.value))}
+                  aria-label="Morph blend length in seconds"
+                  className="w-20 accent-ultra"
+                />
+                <span className="w-8 font-meter text-xs text-white/40">{morphSec}s</span>
+                <button
+                  onClick={() => morphTo("B")}
+                  title="Blend to slot B over the morph length"
+                  className="border border-white/15 px-2 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+                >
+                  B→
+                </button>
+                <select
+                  value={morphB}
+                  onChange={(e) => setMorphB(e.target.value)}
+                  aria-label="Morph slot B"
+                  className="max-w-36 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
+                >
+                  {milkAll.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           ) : null}
 

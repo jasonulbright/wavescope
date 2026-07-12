@@ -32,6 +32,10 @@ interface MilkdropCanvasProps {
   resolutionHeight?: number;
   /** Receives the imperative preset API while the visualizer is live. */
   apiRef?: MutableRefObject<MilkdropApi | null>;
+  /** One-shot blend override for the NEXT preset switch (morph deck, VJ
+   *  cuts). Consumed and reset to null; unset switches blend the classic
+   *  2.7 s. */
+  blendSecRef?: MutableRefObject<number | null>;
   /** One-line message when a preset fails to compile or is refused. */
   onPresetError?: (message: string) => void;
   onFps?: (fps: number) => void;
@@ -51,6 +55,7 @@ export function MilkdropCanvas({
   extraPresets,
   resolutionHeight = 0,
   apiRef,
+  blendSecRef,
   onPresetError,
   onFps,
   onSize,
@@ -233,13 +238,17 @@ export function MilkdropCanvas({
     if (!vizRef.current || !bundle) return;
     const preset = extraRef.current?.[presetName] ?? bundle.presets[presetName];
     if (!preset) return;
+    const blend = blendSecRef?.current ?? 2.7;
+    if (blendSecRef) blendSecRef.current = null;
     let stale = false;
-    applyPreset(preset, 2.7).catch((e) => {
+    applyPreset(preset, blend).catch((e) => {
       if (!stale) onPresetErrorRef.current?.(presetErrorMessage(e));
     });
     return () => {
       stale = true;
     };
+    // blendSecRef is a stable ref consumed per switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetName, applyPreset]);
 
   return <canvas ref={canvasRef} className={className} />;

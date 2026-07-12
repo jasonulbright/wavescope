@@ -58,7 +58,7 @@ export class ClipRecorder {
     const rec = this.recorder;
     if (!rec) return Promise.resolve(null);
     return new Promise((resolve) => {
-      rec.onstop = () => {
+      const cleanup = (): Blob | null => {
         for (const t of this.stream?.getTracks() ?? []) t.stop();
         if (this.tap) {
           try {
@@ -74,12 +74,16 @@ export class ClipRecorder {
         this.recorder = null;
         this.stream = null;
         this.chunks = [];
-        resolve(blob);
+        return blob;
       };
+      rec.onstop = () => resolve(cleanup());
       try {
         rec.stop();
       } catch {
-        resolve(null);
+        // Already inactive (e.g. the captured canvas unmounted and its track
+        // ended before this handler was attached): onstop will never fire, so
+        // tear down here and salvage whatever chunks were flushed.
+        resolve(cleanup());
       }
     });
   }

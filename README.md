@@ -190,10 +190,30 @@ bun run build      # production build → static SPA in app/dist/client
 ## Deployment
 
 WaveScope builds to a fully static SPA (`app/dist/client`) with no server
-runtime — the entire engine runs client-side. Any static host works. This repo
-deploys to [Vercel](https://vercel.com): `app/vercel.json` sets the output to
-`dist/client` with a SPA-fallback rewrite, and pushes to `main` auto-publish to
+runtime — the entire engine runs client-side. This repo deploys to
+[Vercel](https://vercel.com): pushes to `main` auto-publish to
 [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com).
+
+Everything the page loads at runtime — fonts, the Butterchurn and projectM
+engine builds, presets, imagery — is served from the site's own origin
+(`app/public/`), and the Content-Security-Policy header enforces that. The
+one external service the app contacts is Spotify (`accounts.spotify.com` and
+`api.spotify.com` in `connect-src`), and only after a listener connects
+their own Spotify account (see `/docs`).
+
+`app/vercel.json` holds the deploy config: the build command, the
+`dist/client` output directory, and the two things any other static host
+would need to provide as well:
+
+- **SPA fallback** — unknown paths rewrite to `/index.html` so client-side
+  routing owns the URL space. Prefer real 404s for missing files under
+  `/assets/`, `/vendor/`, and `/projectm/`: during a deploy race a fallback
+  can answer an asset URL with the HTML shell, and although `public/sw.js`
+  refuses to cache those, a correct 404 fails faster.
+- **Response headers** — the Content-Security-Policy above, a content-type
+  nosniff, a referrer policy, and a permissions policy for microphone and
+  display capture. Framing is left open: `/viz?embed=1` is meant to be
+  iframed and used as an OBS browser source.
 
 ## Browser support
 

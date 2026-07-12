@@ -212,9 +212,9 @@ would need to provide as well:
   refuses to cache those, a correct 404 fails faster.
 - **Response headers** — the Content-Security-Policy above, a content-type
   nosniff, a referrer policy, and a permissions policy for microphone and
-  display capture. `script-src` includes `'unsafe-eval'` because Butterchurn
-  compiles preset equations with the Function constructor, and
-  `'wasm-unsafe-eval'` for libprojectM's WebAssembly. Framing is left open:
+  display capture. `script-src` carries `'wasm-unsafe-eval'` and no JS
+  `eval`: both MilkDrop engines compile to WebAssembly — libprojectM
+  itself, and Butterchurn 3's preset equations. Framing is left open:
   `/viz?embed=1` is meant to be iframed and used as an OBS browser source.
 
 ## Browser support

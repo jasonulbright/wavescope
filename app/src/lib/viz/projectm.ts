@@ -193,10 +193,25 @@ export function loadProjectM(): Promise<ProjectMLoad> {
         return { available: false, reason: "projectM engine not reachable" };
       }
       try {
-        const mod = (await import(/* @vite-ignore */ GLUE_URL)) as {
-          default: ProjectMFactory;
-        };
-        return { available: true, factory: mod.default };
+        // Vite's dev server refuses to serve /public files through the module
+        // pipeline, so dev imports the glue through a blob URL. The build
+        // imports the static file directly (copied as-is into dist). The
+        // locateFile passed in create() resolves the .wasm path either way.
+        let url = GLUE_URL;
+        if (import.meta.env.DEV) {
+          const glue = await (await fetch(GLUE_URL)).text();
+          url = URL.createObjectURL(
+            new Blob([glue], { type: "text/javascript" }),
+          );
+        }
+        try {
+          const mod = (await import(/* @vite-ignore */ url)) as {
+            default: ProjectMFactory;
+          };
+          return { available: true, factory: mod.default };
+        } finally {
+          if (url !== GLUE_URL) URL.revokeObjectURL(url);
+        }
       } catch {
         cached = null;
         return { available: false, reason: "projectM glue failed to load" };

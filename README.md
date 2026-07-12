@@ -102,14 +102,19 @@ effects; nothing touches `window` during render.
   35+ live canvases (hero, gallery, meters, footer trace) analyze a single
   signal instead of each owning an AudioContext.
 
-- **`milkdrop.ts`** — Butterchurn engine: lazy-loads the self-hosted
-  Butterchurn build (the MIT-licensed WebGL port of MilkDrop 2) and its
-  converted classic preset library from `app/public/vendor/` — no third-party
-  CDN at runtime — keeping ~1 MB of WebGL engine out of the app bundle.
-  `MilkdropCanvas.tsx` connects it to the engine's pass-through analyser
-  node, so presets follow source switches; preset changes blend in place
-  (2.7 s, like classic MilkDrop) without a WebGL rebuild. Butterchurn JSON
-  preset uploads persist in `localStorage`.
+- **`milkdrop.ts`** — Butterchurn engine (the MIT-licensed WebGL port of
+  MilkDrop 2), version 3: each preset's equations ship as eel source and
+  compile to WebAssembly at load time, so no preset ever runs through JS
+  `eval`. The engine and its 107-preset classic library are pinned npm
+  packages that Vite bundles as lazy same-origin chunks — ~1 MB stays out
+  of the app bundle and loads on first engine switch, no third-party CDN
+  at runtime. `MilkdropCanvas.tsx` connects it to the engine's pass-through
+  analyser node, so presets follow source switches; preset changes queue in
+  order and blend in place (2.7 s, like classic MilkDrop) without a WebGL
+  rebuild. Butterchurn JSON preset uploads persist in `localStorage`;
+  presets from the old converter (compiled-JS `*_eqs_str` fields) are
+  refused with a message, since the engine runs with its Function-
+  constructor path disabled.
 
 - **`projectm.ts`** — the real MilkDrop engine: libprojectM v4 compiled to
   WebAssembly (`app/public/projectm/projectm.{js,wasm}`; build recipe in
@@ -164,10 +169,18 @@ effects; nothing touches `window` during render.
 Source arming (four sources + Spotify) with real error states (mic denied,
 share without audio, source ended), engine toggles (built-in / projectM /
 Butterchurn / GPU, mutually exclusive), mode/preset/palette/resolution menus,
-shuffle timer, calm mode, custom palettes, fps + backing-store HUD,
-auto-hiding deck (3 s idle), fullscreen, companion-display launcher, and a
-shortcut map (Space/arrows cycle, F fullscreen, H hide UI, P palette,
-S shuffle, C calm, M displays, ? overlay).
+shuffle timer with an audio-driven VJ option (bass drops hard-cut, lulls
+morph), calm mode, custom palettes, fps + backing-store HUD, auto-hiding
+deck (3 s idle), fullscreen, companion-display launcher, and a shortcut map
+(Space/arrows cycle, F fullscreen, H hide UI, P palette, S shuffle, C calm,
+M displays, L preset lab, ? overlay).
+
+While the MilkDrop engine is active the deck adds two instruments: the
+**preset lab** (edit the active preset's init / per-frame / per-pixel eel
+source and recompile it live; save the edit as a custom preset or export
+the JSON) and the **morph deck** (two preset slots with a 0.5–10 s blend
+length; the arrows crossfade the console between them using the engine's
+own blend).
 
 ## Design system
 
@@ -194,9 +207,10 @@ runtime — the entire engine runs client-side. This repo deploys to
 [Vercel](https://vercel.com): pushes to `main` auto-publish to
 [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com).
 
-Everything the page loads at runtime — fonts, the Butterchurn and projectM
-engine builds, presets, imagery — is served from the site's own origin
-(`app/public/`), and the Content-Security-Policy header enforces that. The
+Everything the page loads at runtime — fonts, the visualizer engines,
+presets, imagery — is served from the site's own origin (static files in
+`app/public/` plus the build's hashed chunks), and the
+Content-Security-Policy header enforces that. The
 one external service the app contacts is Spotify (`accounts.spotify.com` and
 `api.spotify.com` in `connect-src`), and only after a listener connects
 their own Spotify account (see `/docs`).
@@ -207,7 +221,7 @@ would need to provide as well:
 
 - **SPA fallback** — unknown paths rewrite to `/index.html` so client-side
   routing owns the URL space. Prefer real 404s for missing files under
-  `/assets/`, `/vendor/`, and `/projectm/`: during a deploy race a fallback
+  `/assets/` and `/projectm/`: during a deploy race a fallback
   can answer an asset URL with the HTML shell, and although `public/sw.js`
   refuses to cache those, a correct 404 fails faster.
 - **Response headers** — the Content-Security-Policy above, a content-type

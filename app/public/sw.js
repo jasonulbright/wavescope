@@ -1,7 +1,7 @@
 /* WaveScope service worker — offline-first for a fully static SPA.
  *
  *  - /assets/*: content-hashed and immutable → cache-first.
- *  - other same-origin GETs (vendor engines, projectM wasm, .milk presets,
+ *  - other same-origin GETs (projectM wasm, .milk presets,
  *    icons, manifest): stale-while-revalidate — serve fast, refresh behind.
  *  - navigations: network-first, falling back to the cached shell, so the
  *    console keeps opening with no connection at all.

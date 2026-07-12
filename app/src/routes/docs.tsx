@@ -194,7 +194,10 @@ function DocsPage() {
             independently, so a multi-display setup drifts through different
             combinations on its own. In the <em>palettes + shuffle</em> panel
             you can also let the shuffle rotate trace palettes, and check
-            exactly which palettes it is allowed to pick from.
+            exactly which palettes it is allowed to pick from. The <em>VJ</em>{" "}
+            option switches on the signal instead of a timer: a sustained bass
+            rise reads as a drop and hard-cuts to a new preset or mode, and a
+            long stretch without one morphs gently instead.
           </P>
 
           <H3>MilkDrop presets</H3>
@@ -202,8 +205,9 @@ function DocsPage() {
             The <em>milkdrop</em> button in the deck switches the console to a
             second render engine: Butterchurn, the WebGL port of Winamp's
             MilkDrop 2, bundled with a library of converted classic .milk
-            presets (Geiss, Flexi, Martin, shifter and more). The mode menu
-            becomes a preset menu, <Kbd>Space</Kbd> and the arrows cycle
+            presets (Geiss, Flexi, Martin, shifter and more). Each preset's
+            equations compile to WebAssembly the moment it loads. The mode
+            menu becomes a preset menu, <Kbd>Space</Kbd> and the arrows cycle
             presets with MilkDrop's classic 2.7 second blend, and the shuffle
             timer hops presets. The engine loads on demand (about 1 MB, one
             time) and needs WebGL.
@@ -217,6 +221,30 @@ function DocsPage() {
             to the built-in engine if you need the calm guarantee. Running
             MilkDrop on several monitors at once is real GPU work; step the
             resolution down per window if frames drop.
+          </P>
+
+          <H3>The preset lab</H3>
+          <P>
+            While MilkDrop is active, <em>lab</em> in the deck (<Kbd>L</Kbd>)
+            opens an editor on the active preset's equations: the init,
+            per-frame, and per-pixel eel blocks, the same language raw .milk
+            files use. <em>Apply</em> (<Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>)
+            recompiles the edited copy to WebAssembly and cuts the visual to
+            it against the live signal; the readout under the editor shows the
+            compile time, or the compiler's error if the eel does not parse —
+            the previous preset keeps running either way. <em>Save</em> stores
+            the edit as one of your presets under a new name, and{" "}
+            <em>export</em> downloads it as a Butterchurn JSON file.
+          </P>
+
+          <H3>The morph deck</H3>
+          <P>
+            Next to the lab, the <em>MORPH</em> row holds two preset slots and
+            a blend-length slider (0.5–10 seconds). The arrow buttons crossfade
+            the console to a slot's preset over that length using MilkDrop's
+            own blend — set a long blend for slow scene changes, a short one
+            for cuts. The picker and shuffle keep working; morphing just gives
+            you a rehearsed transition between two presets you chose.
           </P>
 
           <H3>projectM: raw .milk presets</H3>
@@ -260,12 +288,15 @@ function DocsPage() {
           </P>
           <P>
             The Butterchurn engine takes Butterchurn JSON presets, its own
-            browser-ready format. If you have raw .milk files, do not convert
-            them: use the <em>projectM</em> engine instead, which loads them
-            directly (see above). Butterchurn is the fallback for browsers
-            without WebGL2, or if you already have a JSON collection. Like
-            everything else in WaveScope, uploaded presets never leave your
-            machine.
+            browser-ready format, with the equations as eel source (the lab's{" "}
+            <em>export</em> produces exactly this). Files from the old
+            converter that carry compiled-JS equations instead are refused
+            with a message — the engine no longer runs converted JavaScript.
+            If you have raw .milk files, do not convert them: use the{" "}
+            <em>projectM</em> engine instead, which loads them directly (see
+            above). Butterchurn is the fallback for browsers without WebGL2,
+            or if you already have a JSON collection. Like everything else in
+            WaveScope, uploaded presets never leave your machine.
           </P>
 
           <H3>Calm mode</H3>

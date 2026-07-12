@@ -80,8 +80,12 @@ export const Route = createFileRoute("/viz")({
   component: VizPage,
 });
 
+/** Shuffle sentinel: audio-driven VJ mode (drops hard-cut, lulls morph). */
+const VJ_SEC = -1;
+
 /** Shuffle timer choices, in seconds; 0 = off. A NEGATIVE value is auto-DJ:
- * the tick hops ENGINE and mode/preset together (interval = abs(sec)). */
+ * the tick hops ENGINE and mode/preset together (interval = abs(sec)).
+ * VJ_SEC switches on the signal itself instead of a timer. */
 const SHUFFLE_OPTIONS = [
   { sec: 0, label: "off" },
   { sec: 15, label: "15s" },
@@ -89,6 +93,7 @@ const SHUFFLE_OPTIONS = [
   { sec: 60, label: "1m" },
   { sec: 300, label: "5m" },
   { sec: -30, label: "DJ" },
+  { sec: VJ_SEC, label: "VJ" },
 ] as const;
 
 const SOURCE_BUTTONS: Array<{ kind: SourceKind; label: string; hint: string }> = [
@@ -712,9 +717,9 @@ function VizPage() {
 
   // Shuffle: hop to a random OTHER mode every shuffleSec seconds, and
   // optionally to a random palette from the user's include list. Negative
-  // interval = auto-DJ (engines hop too).
+  // interval = auto-DJ (engines hop too). VJ mode has its own effect below.
   useEffect(() => {
-    if (!shuffleSec) return;
+    if (!shuffleSec || shuffleSec === VJ_SEC) return;
     const iv = setInterval(() => {
       if (shuffleSec < 0) {
         djHop();
@@ -767,6 +772,69 @@ function VizPage() {
     }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
   }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, pm, pmNames, gpu, djHop]);
+
+  // Auto-VJ: audio-driven switching instead of a timer. Bass energy feeds a
+  // fast and a slow envelope; the fast one spiking over the slow one is a
+  // drop → hard cut to another preset/mode. A long stretch without a drop
+  // morphs gently instead (MilkDrop blends 5 s; other engines just switch).
+  useEffect(() => {
+    if (shuffleSec !== VJ_SEC) return;
+    let slow = 0;
+    let fast = 0;
+    let lastSwitch = performance.now();
+    const HOLD_MS = 8000; // minimum time between switches
+    const LULL_MS = 45000; // no drop for this long → gentle morph
+    const hop = (blendSec: number) => {
+      lastSwitch = performance.now();
+      if (milk && milkAll.length) {
+        milkBlendRef.current = blendSec;
+        setMilkPreset((cur) => {
+          const others = milkAll.filter((n) => n !== cur);
+          return others.length
+            ? others[Math.floor(Math.random() * others.length)]
+            : cur;
+        });
+        return;
+      }
+      if (gpu) {
+        setGpuMode((cur) => {
+          const others = GPU_MODES.filter((m) => m.id !== cur);
+          return others.length
+            ? others[Math.floor(Math.random() * others.length)].id
+            : cur;
+        });
+        return;
+      }
+      if (pm && pmNames.length) {
+        setPmPreset((cur) => {
+          const others = pmNames.filter((n) => n !== cur);
+          return others.length
+            ? others[Math.floor(Math.random() * others.length)]
+            : cur;
+        });
+        return;
+      }
+      setModeId((cur) => {
+        const others = availableModes.filter((m) => m.id !== cur);
+        return others.length
+          ? others[Math.floor(Math.random() * others.length)].id
+          : cur;
+      });
+    };
+    const iv = setInterval(() => {
+      const f = getFrame();
+      slow = slow * 0.985 + f.bass * 0.015; // ~10 s memory at this tick rate
+      fast = fast * 0.6 + f.bass * 0.4; // ~0.5 s
+      const held = performance.now() - lastSwitch;
+      if (held < HOLD_MS) return;
+      if (fast > slow * 1.5 && fast > 0.18) {
+        hop(0); // drop: hard cut
+        return;
+      }
+      if (held > LULL_MS) hop(5); // lull: slow morph
+    }, 150);
+    return () => clearInterval(iv);
+  }, [shuffleSec, milk, milkAll, pm, pmNames, gpu, availableModes, getFrame]);
 
   const cycleShuffle = useCallback(() => {
     setShuffleSec((cur) => {

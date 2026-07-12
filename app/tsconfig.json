@@ -24,8 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@wavescope/icons/*": ["./src/lib/ui-material-icons.ts"]
+      "@/*": ["./src/*"]
     }
   }
 }

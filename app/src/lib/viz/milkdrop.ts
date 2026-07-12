@@ -3,17 +3,27 @@
  * plus its library of converted classic .milk presets (Geiss, Flexi, Martin,
  * shifter and friends).
  *
- * The engine is ~800 kB of WebGL code, so it is NOT in the app bundle: it
- * lazy-loads from this site's own /vendor files (see public/vendor/NOTICE.txt)
- * the first time the user switches the console to the MilkDrop engine — no
- * third-party CDN at runtime. Client-only: call from effects or handlers.
+ * Butterchurn 3 compiles each preset's equations — eel source carried in the
+ * preset's `*_eqs_eel` fields — to WebAssembly when the preset loads, so
+ * preset compilation runs under the site's `'wasm-unsafe-eval'` policy with
+ * no JavaScript evaluation. The engine and the 107-preset base pack are
+ * pinned npm packages (butterchurn 3.0.0-beta.5, butterchurn-presets
+ * 3.0.0-beta.4) that Vite bundles as lazy same-origin chunks: they stay out
+ * of the app bundle and load the first time the user switches the console to
+ * the MilkDrop engine — no third-party CDN at runtime. Client-only: call
+ * from effects or handlers.
  */
 
 export interface ButterchurnVisualizer {
   connectAudio(node: AudioNode): void;
-  /** butterchurn 2.x exposes this; used to unwire the audio edge on teardown. */
+  /** Unwires the audio edge on teardown. */
   disconnectAudio?(node: AudioNode): void;
-  loadPreset(preset: unknown, blendTimeSec: number): void;
+  /**
+   * Butterchurn 3 compiles the preset's eel equations to WASM before the
+   * blend starts: resolves once the preset is applied, rejects with the
+   * compile error (the previous preset keeps rendering).
+   */
+  loadPreset(preset: unknown, blendTimeSec: number): Promise<void>;
   setRendererSize(width: number, height: number): void;
   render(): void;
 }
@@ -22,7 +32,7 @@ interface ButterchurnModule {
   createVisualizer(
     ctx: AudioContext,
     canvas: HTMLCanvasElement,
-    opts: { width: number; height: number },
+    opts: { width: number; height: number; onlyUseWASM?: boolean },
   ): ButterchurnVisualizer;
 }
 
@@ -33,24 +43,24 @@ export interface MilkdropBundle {
   presetNames: string[];
 }
 
-// Self-hosted pinned builds (butterchurn 2.6.7, butterchurn-presets 2.4.7).
-const BUTTERCHURN_SRC = "/vendor/butterchurn.min.js";
-const PRESETS_SRC = "/vendor/butterchurnPresets.min.js";
+/**
+ * True for presets converted with the old JS pipeline: `*_eqs_str` fields
+ * holding compiled JavaScript. Butterchurn 3 would run those through the
+ * Function constructor, which the site's script policy does not allow, so
+ * the console refuses them with a message instead. Presets carrying eel
+ * source (`*_eqs_eel`) compile to WebAssembly.
+ */
+export function isLegacyJsPreset(preset: unknown): boolean {
+  if (!preset || typeof preset !== "object") return false;
+  const p = preset as Record<string, unknown>;
+  return "init_eqs_str" in p && !("init_eqs_eel" in p);
+}
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-      resolve();
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(s);
-  });
+/** First line of a preset load/compile failure, sized for a readout. */
+export function presetErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const line = raw.split("\n")[0]?.trim();
+  return line || "The preset failed to compile.";
 }
 
 /* ------------------------------------------------------------------ */
@@ -88,22 +98,24 @@ let bundle: Promise<MilkdropBundle> | null = null;
 export function loadMilkdrop(): Promise<MilkdropBundle> {
   if (!bundle) {
     bundle = (async () => {
-      await Promise.all([loadScript(BUTTERCHURN_SRC), loadScript(PRESETS_SRC)]);
-      const w = window as unknown as {
-        butterchurn: ButterchurnModule & { default?: ButterchurnModule };
-        butterchurnPresets: {
-          getPresets(): Record<string, unknown>;
-          default?: { getPresets(): Record<string, unknown> };
-        };
-      };
-      const butterchurn = w.butterchurn.default ?? w.butterchurn;
-      const packs = w.butterchurnPresets.default ?? w.butterchurnPresets;
-      const presets = packs.getPresets();
-      return {
-        butterchurn,
-        presets,
-        presetNames: Object.keys(presets).sort((a, b) => a.localeCompare(b)),
-      };
+      const [engineMod, packMod] = await Promise.all([
+        import("butterchurn"),
+        import("butterchurn-presets"),
+      ]);
+      const butterchurn = engineMod.default as ButterchurnModule;
+      // The preset pack is a UMD build: unwrap the interop default, twice —
+      // the factory returns a namespace whose own default is the name→preset
+      // map.
+      const ns = (packMod as { default?: unknown }).default ?? packMod;
+      const presets = ((ns as { default?: unknown }).default ?? ns) as Record<
+        string,
+        unknown
+      >;
+      const presetNames = Object.keys(presets).sort((a, b) =>
+        a.localeCompare(b),
+      );
+      if (!presetNames.length) throw new Error("empty preset pack");
+      return { butterchurn, presets, presetNames };
     })().catch((e) => {
       bundle = null; // allow a retry after a network hiccup
       throw e;

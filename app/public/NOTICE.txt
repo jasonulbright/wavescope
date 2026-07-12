@@ -1,14 +1,14 @@
-Third-party code vendored for self-hosted serving. Unmodified builds from npm.
+Third-party code served from this origin.
 
-butterchurn.min.js
-  butterchurn v2.6.7 — WebGL implementation of the MilkDrop 2 visualizer.
+Butterchurn engine and preset pack (bundled into the app's lazy chunks)
+  butterchurn v3.0.0-beta.5 — WebGL implementation of the MilkDrop 2
+  visualizer; preset equations compile to WebAssembly.
+  butterchurn-presets v3.0.0-beta.4 (base pack) — classic MilkDrop community
+  presets converted for Butterchurn (presets copyright their original
+  authors).
   Copyright (c) Jordan Berg. MIT License.
   https://github.com/jberg/butterchurn
-
-butterchurnPresets.min.js
-  butterchurn-presets v2.4.7 — classic MilkDrop community presets converted
-  for Butterchurn (presets copyright their original authors).
-  MIT License. https://github.com/jberg/butterchurn-presets
+  https://github.com/jberg/butterchurn-presets
 
 --- Self-hosted brand fonts (public/assets/fonts/) ---
 

@@ -20,12 +20,13 @@ import { VizCanvas } from "../components/ws/VizCanvas";
 import { useFocusTrap } from "../hooks/use-focus-trap";
 import { WorkerCanvas, workerCanvasSupported } from "../components/ws/WorkerCanvas";
 import type { PaletteRef } from "../lib/viz/render-worker";
-import { MilkdropCanvas } from "../components/ws/MilkdropCanvas";
+import { MilkdropCanvas, type MilkdropApi } from "../components/ws/MilkdropCanvas";
 import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
   loadCustomMilkPresets,
   saveCustomMilkPresets,
+  isLegacyJsPreset,
 } from "../lib/viz/milkdrop";
 import {
   loadProjectM,
@@ -122,6 +123,8 @@ function VizPage() {
   const [milkLoading, setMilkLoading] = useState(false);
   const [customMilk, setCustomMilk] = useState<Record<string, unknown>>({});
   const milkFileRef = useRef<HTMLInputElement>(null);
+  // Imperative preset surface of the live MilkdropCanvas (lab + morph deck).
+  const milkApiRef = useRef<MilkdropApi | null>(null);
   // projectM (WASM MilkDrop): a separate engine that runs raw .milk presets.
   const [pm, setPm] = useState(false);
   const [pmAvailable, setPmAvailable] = useState<boolean | null>(null);
@@ -598,6 +601,12 @@ function VizPage() {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             throw new Error("not a preset");
           }
+          if (isLegacyJsPreset(parsed)) {
+            failed.push(
+              `${file.name} (carries compiled-JS equations from the old converter; the engine runs eel-source presets only)`,
+            );
+            continue;
+          }
           const name = file.name.replace(/\.json$/i, "");
           next[name] = parsed;
           lastAdded = name;
@@ -956,6 +965,8 @@ function VizPage() {
           presetName={milkPreset}
           extraPresets={customMilk}
           resolutionHeight={resolution.height}
+          apiRef={milkApiRef}
+          onPresetError={setError}
           onFps={setFps}
           onSize={setCanvasSize}
           className="absolute inset-0 h-full w-full"

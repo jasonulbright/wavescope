@@ -1,10 +1,26 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import type { MutableRefObject } from "react";
 import type { AudioGraphSource } from "../../lib/viz/types";
 import {
+  isLegacyJsPreset,
   loadMilkdrop,
+  presetErrorMessage,
   type ButterchurnVisualizer,
   type MilkdropBundle,
 } from "../../lib/viz/milkdrop";
+
+/**
+ * Imperative surface for deck features (preset lab, morph deck): queue a
+ * preset object onto the running visualizer. Loads run in submission order;
+ * a rejection carries the eel compile error and the previous preset keeps
+ * rendering.
+ */
+export interface MilkdropApi {
+  applyPreset(preset: unknown, blendSec: number): Promise<void>;
+}
+
+const LEGACY_PRESET_MESSAGE =
+  "This preset carries compiled-JS equations (old converter); the engine runs eel-source presets only.";
 
 interface MilkdropCanvasProps {
   /** Console AudioEngine or a companion's PcmLink; both expose the graph. */
@@ -14,6 +30,10 @@ interface MilkdropCanvasProps {
   extraPresets?: Record<string, unknown>;
   /** Backing-store height in device pixels; 0 = native (CSS size x DPR). */
   resolutionHeight?: number;
+  /** Receives the imperative preset API while the visualizer is live. */
+  apiRef?: MutableRefObject<MilkdropApi | null>;
+  /** One-line message when a preset fails to compile or is refused. */
+  onPresetError?: (message: string) => void;
   onFps?: (fps: number) => void;
   onSize?: (s: string) => void;
   className?: string;
@@ -30,6 +50,8 @@ export function MilkdropCanvas({
   presetName,
   extraPresets,
   resolutionHeight = 0,
+  apiRef,
+  onPresetError,
   onFps,
   onSize,
   className,
@@ -40,6 +62,31 @@ export function MilkdropCanvas({
   const presetRef = useRef(presetName);
   const extraRef = useRef(extraPresets);
   extraRef.current = extraPresets;
+  const onPresetErrorRef = useRef(onPresetError);
+  onPresetErrorRef.current = onPresetError;
+  // Preset loads compile eel to WASM asynchronously; the queue keeps them in
+  // submission order so a slow compile cannot land after a newer pick.
+  const loadQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const applyPreset = useCallback((preset: unknown, blendSec: number) => {
+    const run = loadQueueRef.current.then(() => {
+      const viz = vizRef.current;
+      if (!viz) return;
+      if (isLegacyJsPreset(preset)) throw new Error(LEGACY_PRESET_MESSAGE);
+      return viz.loadPreset(preset, blendSec);
+    });
+    // Keep the queue alive past a failed load; callers see the rejection.
+    loadQueueRef.current = run.catch(() => {});
+    return run;
+  }, []);
+
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = { applyPreset };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [apiRef, applyPreset]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -74,7 +121,7 @@ export function MilkdropCanvas({
     };
 
     void loadMilkdrop()
-      .then((bundle) => {
+      .then(async (bundle) => {
         if (disposed) return;
         const ctx = audio.audioContext;
         const node = audio.analyserNode;
@@ -87,15 +134,25 @@ export function MilkdropCanvas({
         const viz = bundle.butterchurn.createVisualizer(ctx, canvas, {
           width: w,
           height: h,
+          // Never fall back to the Function-constructor path for old JS
+          // presets — the site's script policy forbids it; legacy presets
+          // are refused with a message instead (isLegacyJsPreset).
+          onlyUseWASM: true,
         });
         viz.connectAudio(node);
         connectedNode = node;
+        vizRef.current = viz;
         const preset =
           extraRef.current?.[presetRef.current] ??
           bundle.presets[presetRef.current] ??
           bundle.presets[bundle.presetNames[0]];
-        viz.loadPreset(preset, 0);
-        vizRef.current = viz;
+        try {
+          // First frame waits for the WASM compile so it shows the preset.
+          await applyPreset(preset, 0);
+        } catch (e) {
+          if (!disposed) onPresetErrorRef.current?.(presetErrorMessage(e));
+        }
+        if (disposed) return;
         onSize?.(`${w}x${h}`);
 
         ro = new ResizeObserver(() => {
@@ -128,8 +185,10 @@ export function MilkdropCanvas({
         };
         raf = requestAnimationFrame(loop);
       })
-      .catch(() => {
-        // Load failure surfaces through the console's milkdrop error state.
+      .catch((e) => {
+        // Engine-load rejections already surface via the console's toggle;
+        // init failures (context creation, first compile) surface here.
+        if (!disposed) onPresetErrorRef.current?.(presetErrorMessage(e));
       });
 
     return () => {
@@ -149,10 +208,16 @@ export function MilkdropCanvas({
           // still frees the scarce GPU resource.
         }
       }
-      const gl =
-        canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-      const loseCtx = gl?.getExtension("WEBGL_lose_context");
-      loseCtx?.loseContext();
+      // Release only a context the visualizer actually created: on a canvas
+      // that never initialized (cleanup can run before the async init lands),
+      // getContext would CREATE a context here, and losing it would kill the
+      // visualizer the next effect run builds on this same element.
+      if (viz) {
+        const gl =
+          canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+        const loseCtx = gl?.getExtension("WEBGL_lose_context");
+        loseCtx?.loseContext();
+      }
       vizRef.current = null;
       bundleRef.current = null;
       connectedNode = null;
@@ -164,13 +229,18 @@ export function MilkdropCanvas({
   // Preset switches blend in place, 2.7s crossfade like classic MilkDrop.
   useEffect(() => {
     presetRef.current = presetName;
-    const viz = vizRef.current;
     const bundle = bundleRef.current;
-    if (viz && bundle) {
-      const preset = extraRef.current?.[presetName] ?? bundle.presets[presetName];
-      if (preset) viz.loadPreset(preset, 2.7);
-    }
-  }, [presetName]);
+    if (!vizRef.current || !bundle) return;
+    const preset = extraRef.current?.[presetName] ?? bundle.presets[presetName];
+    if (!preset) return;
+    let stale = false;
+    applyPreset(preset, 2.7).catch((e) => {
+      if (!stale) onPresetErrorRef.current?.(presetErrorMessage(e));
+    });
+    return () => {
+      stale = true;
+    };
+  }, [presetName, applyPreset]);
 
   return <canvas ref={canvasRef} className={className} />;
 }

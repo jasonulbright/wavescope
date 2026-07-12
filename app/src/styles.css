@@ -16,7 +16,7 @@
 /* Self-hosted brand fonts (public/assets/fonts) — no runtime CDN fetch, so a
  * visitor's IP never reaches a font host and the CSP can stay tight. Satoshi
  * (ITF/Fontshare) at the three weights the app uses; JetBrains Mono (OFL) as
- * one variable latin file. See public/vendor/NOTICE.txt for licenses. */
+ * one variable latin file. See public/NOTICE.txt for licenses. */
 @font-face {
   font-family: "Satoshi";
   font-style: normal;

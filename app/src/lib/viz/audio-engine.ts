@@ -19,6 +19,8 @@ export class AudioEngine {
   private sourceNode: AudioNode | null = null;
   private stream: MediaStream | null = null;
   private mediaEl: HTMLAudioElement | null = null;
+  /** Object URL backing mediaEl — revoked on detach or the file leaks. */
+  private mediaUrl: string | null = null;
   private demoNodes: { stop: () => void } | null = null;
 
   private fft = new Uint8Array(1024);
@@ -66,6 +68,10 @@ export class AudioEngine {
       this.mediaEl.pause();
       this.mediaEl.src = "";
       this.mediaEl = null;
+    }
+    if (this.mediaUrl) {
+      URL.revokeObjectURL(this.mediaUrl);
+      this.mediaUrl = null;
     }
     if (this.demoNodes) {
       this.demoNodes.stop();
@@ -174,14 +180,23 @@ export class AudioEngine {
   async startFile(file: File): Promise<void> {
     const ctx = this.ensureContext();
     const el = new Audio();
-    el.src = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
+    el.src = url;
     el.loop = true;
     const node = ctx.createMediaElementSource(el);
     // Files are audible: analyser AND speakers.
     node.connect(ctx.destination);
     this.attach(node, { kind: "file", label: file.name });
     this.mediaEl = el;
-    await el.play();
+    this.mediaUrl = url;
+    try {
+      await el.play();
+    } catch (err) {
+      // Unplayable file (codec, autoplay policy): unwind the attach so the
+      // engine isn't left armed on a dead source, and release the blob URL.
+      this.detach();
+      throw err;
+    }
   }
 
   async start(kind: SourceKind, file?: File): Promise<void> {

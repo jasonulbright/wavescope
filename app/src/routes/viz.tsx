@@ -136,6 +136,11 @@ function VizPage() {
   // Loaded engine bundle: the lab reads preset objects from it by name.
   const milkBundleRef = useRef<MilkdropBundle | null>(null);
   const [labOpen, setLabOpen] = useState(false);
+  // The lab belongs to the MilkDrop engine: leaving it closes the panel, so
+  // hopping back (even via DJ shuffle) cannot silently reopen it.
+  useEffect(() => {
+    if (!milk) setLabOpen(false);
+  }, [milk]);
   // One-shot blend override consumed by the canvas on the next preset switch.
   const milkBlendRef = useRef<number | null>(null);
   // Morph deck: two preset slots and the blend length between them.

@@ -34,9 +34,10 @@ const SHORTCUTS: Array<[string, string]> = [
   ["F", "Toggle fullscreen"],
   ["H", "Hide or show the control deck"],
   ["P", "Cycle the trace palette"],
-  ["S", "Cycle the shuffle timer (off, 15s, 30s, 1m, 5m)"],
+  ["S", "Cycle the shuffle timer (off, 15s–5m, DJ, VJ)"],
   ["C", "Toggle calm mode (photosensitivity-friendly)"],
   ["M", "Open companion windows on other displays"],
+  ["L", "Preset lab (MilkDrop engine only)"],
   ["?", "Shortcut overlay"],
   ["Esc", "Show controls, close overlays"],
 ];

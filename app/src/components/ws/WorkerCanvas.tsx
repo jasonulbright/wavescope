@@ -18,6 +18,14 @@ interface WorkerCanvasProps {
   className?: string;
 }
 
+/**
+ * The live worker for each transferred canvas. A canvas can be handed to a
+ * worker exactly once, but React re-runs effects against the same element
+ * (dev re-invokes; trackPointer can change), so the worker outlives any one
+ * effect run and is only terminated once its canvas has left the DOM.
+ */
+const canvasWorkers = new WeakMap<HTMLCanvasElement, Worker>();
+
 /** True when the browser can hand a canvas to a worker. */
 export function workerCanvasSupported(): boolean {
   return (
@@ -60,23 +68,28 @@ export function WorkerCanvas({
   const cfgRef = useRef({ modeId, paletteRef, resolutionHeight });
   cfgRef.current = { modeId, paletteRef, resolutionHeight };
 
-  // Worker lifecycle: created once per mount (a transferred canvas cannot be
-  // transferred twice, and React gives us a fresh element on remount).
+  // Worker lifecycle: one worker per canvas, created on the first effect run
+  // that sees the element and reused by later runs (each run rebinds its own
+  // pump loop, observers, and listeners). Cleanup defers termination until
+  // the canvas has actually left the DOM.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const worker = new Worker(
-      new URL("../../lib/viz/render-worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    workerRef.current = worker;
-
+    let worker = canvasWorkers.get(canvas);
     const post = (msg: WorkerInMsg, transfer?: Transferable[]) =>
-      transfer ? worker.postMessage(msg, transfer) : worker.postMessage(msg);
+      transfer ? worker!.postMessage(msg, transfer) : worker!.postMessage(msg);
 
-    const offscreen = canvas.transferControlToOffscreen();
-    post({ type: "init", canvas: offscreen }, [offscreen]);
+    if (!worker) {
+      worker = new Worker(
+        new URL("../../lib/viz/render-worker.ts", import.meta.url),
+        { type: "module" },
+      );
+      canvasWorkers.set(canvas, worker);
+      const offscreen = canvas.transferControlToOffscreen();
+      post({ type: "init", canvas: offscreen }, [offscreen]);
+    }
+    workerRef.current = worker;
 
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -156,11 +169,20 @@ export function WorkerCanvas({
         canvas.removeEventListener("pointermove", onPointer);
         canvas.removeEventListener("pointerleave", onLeave);
       }
-      worker.terminate();
+      worker.onmessage = null;
       workerRef.current = null;
+      // The transferred canvas can never be re-transferred, so the worker
+      // must survive effect re-runs against a still-mounted element.
+      // Terminate only once the canvas is really gone from the DOM.
+      setTimeout(() => {
+        if (!canvas.isConnected) {
+          canvasWorkers.get(canvas)?.terminate();
+          canvasWorkers.delete(canvas);
+        }
+      }, 0);
     };
-    // Worker is created once; config/pointer changes flow through refs + the
-    // config effect below.
+    // Worker identity is per canvas element; config/pointer changes flow
+    // through refs + the config effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackPointer]);
 

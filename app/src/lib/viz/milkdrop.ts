@@ -21,7 +21,9 @@ export interface ButterchurnVisualizer {
   /**
    * Butterchurn 3 compiles the preset's eel equations to WASM before the
    * blend starts: resolves once the preset is applied, rejects with the
-   * compile error (the previous preset keeps rendering).
+   * compile error (the previous preset keeps rendering). A preset with no
+   * eel source resolves WITHOUT applying anything under onlyUseWASM, so
+   * callers gate on isLoadablePreset first.
    */
   loadPreset(preset: unknown, blendTimeSec: number): Promise<void>;
   setRendererSize(width: number, height: number): void;
@@ -54,6 +56,17 @@ export function isLegacyJsPreset(preset: unknown): boolean {
   if (!preset || typeof preset !== "object") return false;
   const p = preset as Record<string, unknown>;
   return "init_eqs_str" in p && !("init_eqs_eel" in p);
+}
+
+/**
+ * True when the engine can actually load the preset: Butterchurn 3 takes the
+ * WASM path only for presets carrying eel source (every preset in the
+ * bundled pack does, some with an empty init block). Anything else no-ops
+ * under onlyUseWASM, so callers refuse it with a message instead of showing
+ * a preset name that never took effect.
+ */
+export function isLoadablePreset(preset: unknown): boolean {
+  return !!preset && typeof preset === "object" && "init_eqs_eel" in preset;
 }
 
 /** First line of a preset load/compile failure, sized for a readout. */

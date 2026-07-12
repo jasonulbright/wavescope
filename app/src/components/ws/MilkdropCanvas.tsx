@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type { AudioGraphSource } from "../../lib/viz/types";
 import {
   isLegacyJsPreset,
+  isLoadablePreset,
   loadMilkdrop,
   presetErrorMessage,
   type ButterchurnVisualizer,
@@ -21,6 +22,8 @@ export interface MilkdropApi {
 
 const LEGACY_PRESET_MESSAGE =
   "This preset carries compiled-JS equations (old converter); the engine runs eel-source presets only.";
+const NOT_EEL_MESSAGE =
+  "This file has no eel equations; it is not a Butterchurn preset.";
 
 interface MilkdropCanvasProps {
   /** Console AudioEngine or a companion's PcmLink; both expose the graph. */
@@ -74,10 +77,16 @@ export function MilkdropCanvas({
   const loadQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const applyPreset = useCallback((preset: unknown, blendSec: number) => {
+    // Bind the visualizer at submission time: an entry queued for a
+    // torn-down generation drops instead of loading into its successor.
+    const viz = vizRef.current;
     const run = loadQueueRef.current.then(() => {
-      const viz = vizRef.current;
-      if (!viz) return;
-      if (isLegacyJsPreset(preset)) throw new Error(LEGACY_PRESET_MESSAGE);
+      if (!viz || vizRef.current !== viz) return;
+      if (!isLoadablePreset(preset)) {
+        throw new Error(
+          isLegacyJsPreset(preset) ? LEGACY_PRESET_MESSAGE : NOT_EEL_MESSAGE,
+        );
+      }
       return viz.loadPreset(preset, blendSec);
     });
     // Keep the queue alive past a failed load; callers see the rejection.
@@ -96,6 +105,10 @@ export function MilkdropCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Each visualizer generation owns its queue: a load still in flight on
+    // the previous generation must not delay this one's first frame or
+    // surface its late rejection here.
+    loadQueueRef.current = Promise.resolve();
     let disposed = false;
     let raf = 0;
     let frames = 0;

@@ -28,6 +28,7 @@ import {
   loadCustomMilkPresets,
   saveCustomMilkPresets,
   isLegacyJsPreset,
+  isLoadablePreset,
   type MilkdropBundle,
 } from "../lib/viz/milkdrop";
 import {
@@ -625,9 +626,11 @@ function VizPage() {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             throw new Error("not a preset");
           }
-          if (isLegacyJsPreset(parsed)) {
+          if (!isLoadablePreset(parsed)) {
             failed.push(
-              `${file.name} (carries compiled-JS equations from the old converter; the engine runs eel-source presets only)`,
+              isLegacyJsPreset(parsed)
+                ? `${file.name} (carries compiled-JS equations from the old converter; the engine runs eel-source presets only)`
+                : `${file.name} (no eel equations; not a Butterchurn preset)`,
             );
             continue;
           }

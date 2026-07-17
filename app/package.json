@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && bun test src/lib && vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "test": "bun test src/lib",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

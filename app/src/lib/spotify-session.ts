@@ -30,7 +30,9 @@ interface PendingAuth {
 }
 
 export class SpotifySession {
-  private fallback: SpotifyStore | null = null;
+  // A failed storage write must not make stale persisted credentials current
+  // again. Remain disconnected in this page until an explicit retry succeeds.
+  private storageFailed = false;
   private refresh: { key: string; promise: Promise<string> } | null = null;
   private now: () => number;
   private id: () => string;
@@ -41,6 +43,7 @@ export class SpotifySession {
   }
 
   load(): SpotifyStore | null {
+    if (this.storageFailed) return null;
     try {
       const value: unknown = JSON.parse(this.options.storage.getItem(SPOTIFY_KEY) ?? "null");
       if (!value || typeof value !== "object") return null;
@@ -57,13 +60,18 @@ export class SpotifySession {
         refreshToken: typeof s.refreshToken === "string" ? s.refreshToken : undefined,
         expiresAt: typeof s.expiresAt === "number" ? s.expiresAt : undefined,
       };
-    } catch { return this.fallback; }
+    } catch { return null; }
   }
 
   private save(s: SpotifyStore | null) {
-    this.fallback = s;
-    if (s) this.options.storage.setItem(SPOTIFY_KEY, JSON.stringify(s));
-    else this.options.storage.removeItem(SPOTIFY_KEY);
+    try {
+      if (s) this.options.storage.setItem(SPOTIFY_KEY, JSON.stringify(s));
+      else this.options.storage.removeItem(SPOTIFY_KEY);
+      this.storageFailed = false;
+    } catch {
+      this.storageFailed = true;
+      throw new Error("Spotify credentials could not be updated in browser storage. This tab is disconnected; clear site data if old credentials remain after reload.");
+    }
   }
 
   configure(clientId: string) {
@@ -76,8 +84,8 @@ export class SpotifySession {
   }
 
   disconnect() {
-    this.options.pending.removeItem(AUTH_KEY);
-    this.save(null);
+    try { this.options.pending.removeItem(AUTH_KEY); }
+    finally { this.save(null); }
   }
 
   private current(s: SpotifyStore) {

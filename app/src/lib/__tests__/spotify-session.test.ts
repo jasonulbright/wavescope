@@ -25,6 +25,23 @@ function setup(fetcher: () => Promise<Response> = async () => Response.json({
 }
 
 describe("Spotify session boundaries", () => {
+  test("failed credential removal still invalidates this tab and a pending refresh", async () => {
+    let resolve!: (res: Response) => void;
+    const { client, saved, seed } = setup(() => new Promise((r) => { resolve = r; }));
+    seed(); const request = client.token();
+    saved.removeItem = () => { throw new Error("storage denied"); };
+    expect(() => client.disconnect()).toThrow("This tab is disconnected");
+    expect(client.load()).toBeNull();
+    resolve(Response.json({ access_token: "late", expires_in: 3600 }));
+    await expect(request).rejects.toThrow("session changed");
+    client.configure(ID); expect(client.load()?.refreshToken).toBeUndefined();
+  });
+  test("pending-state cleanup failure cannot prevent credential invalidation", () => {
+    const { client, pending, seed } = setup(); seed();
+    pending.removeItem = () => { throw new Error("session storage denied"); };
+    expect(() => client.disconnect()).toThrow("session storage denied");
+    expect(client.load()).toBeNull();
+  });
   test("configuration validates the ID before changing an existing session", () => {
     const { client, seed } = setup(); seed();
     expect(() => client.configure("bad")).toThrow("Client ID");

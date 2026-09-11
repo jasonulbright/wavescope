@@ -131,39 +131,39 @@ describe("sw.js rewrite-poisoning guard", () => {
     const res = await sw.dispatchFetch("/projectm/projectm.js");
     expect(res.status).toBe(200); // pass-through is fine…
     await new Promise((r) => setTimeout(r, 5));
-    expect(sw.cached("ws-v2", "/projectm/projectm.js")).toBeUndefined(); // …caching is not
+    expect(sw.cached("ws-v3", "/projectm/projectm.js")).toBeUndefined(); // …caching is not
   });
 
   test("a 200 HTML answer for a hashed asset is never cached either", async () => {
     sw.setFetch(async () => html());
     await sw.dispatchFetch("/assets/viz-abc123.js");
     await new Promise((r) => setTimeout(r, 5));
-    expect(sw.cached("ws-v2", "/assets/viz-abc123.js")).toBeUndefined();
+    expect(sw.cached("ws-v3", "/assets/viz-abc123.js")).toBeUndefined();
   });
 
   test("real javascript responses ARE cached (SWR path)", async () => {
     sw.setFetch(async () => js());
     await sw.dispatchFetch("/projectm/projectm.js");
     await new Promise((r) => setTimeout(r, 5));
-    expect(sw.cached("ws-v2", "/projectm/projectm.js")).toBeDefined();
+    expect(sw.cached("ws-v3", "/projectm/projectm.js")).toBeDefined();
   });
 
   test("real javascript responses ARE cached (cache-first assets path)", async () => {
     sw.setFetch(async () => js());
     await sw.dispatchFetch("/assets/viz-abc123.js");
     await new Promise((r) => setTimeout(r, 5));
-    expect(sw.cached("ws-v2", "/assets/viz-abc123.js")).toBeDefined();
+    expect(sw.cached("ws-v3", "/assets/viz-abc123.js")).toBeDefined();
   });
 
   test("navigations still cache the HTML shell", async () => {
     sw.setFetch(async () => html());
     await sw.dispatchFetch("/viz", "navigate");
     await new Promise((r) => setTimeout(r, 5));
-    expect(sw.cached("ws-v2", "/index.html")).toBeDefined();
+    expect(sw.cached("ws-v3", "/index.html")).toBeDefined();
   });
 
   test("activate purges old cache versions (heals poisoned ws-v1)", async () => {
-    sw.setExistingKeys(["ws-v1", "ws-v2"]);
+    sw.setExistingKeys(["ws-v1", "ws-v2", "ws-v3"]);
     let done: Promise<unknown> = Promise.resolve();
     sw.handlers.get("activate")!({
       request: { method: "GET", url: ORIGIN, mode: "" },
@@ -174,6 +174,31 @@ describe("sw.js rewrite-poisoning guard", () => {
     });
     await done;
     expect(sw.deleted).toContain("ws-v1");
-    expect(sw.deleted).not.toContain("ws-v2");
+    expect(sw.deleted).toContain("ws-v2");
+    expect(sw.deleted).not.toContain("ws-v3");
   });
+});
+
+test("audience navigation cannot poison the console shell or expose it offline", async () => {
+  sw.setFetch(async () => html());
+  await sw.dispatchFetch("/viz", "navigate");
+  await new Promise((r) => setTimeout(r, 5));
+  const audienceHtml = '<!doctype html><video id="audience"></video>';
+  sw.setFetch(async () => new Response(audienceHtml, { headers: { "content-type": "text/html" } }));
+  await sw.dispatchFetch("/audience.html", "navigate");
+  expect(await sw.cached("ws-v3", "/index.html")!.clone().text()).toBe("<!doctype html>");
+  expect(await sw.cached("ws-v3", "/audience.html")!.clone().text()).toBe(audienceHtml);
+  sw.setFetch(async () => { throw new Error("offline"); });
+  expect(await (await sw.dispatchFetch("/audience.html", "navigate")).clone().text()).toBe(audienceHtml);
+  expect(await (await sw.dispatchFetch("/viz", "navigate")).clone().text()).toBe("<!doctype html>");
+});
+
+test("uncached offline output and rewritten audience URLs always fail to a blank page", async () => {
+  sw.setFetch(async () => { throw new Error("offline"); });
+  const offline = await (await sw.dispatchFetch("/audience.html", "navigate")).text();
+  expect(offline).toContain("background:#000"); expect(offline).not.toContain("<script");
+  sw.setFetch(async () => new Response('<html><script src="/console.js"></script></html>'));
+  const rewritten = await (await sw.dispatchFetch("/audience.html", "navigate")).text();
+  expect(rewritten).toBe(offline);
+  expect(sw.cached("ws-v3", "/audience.html")).toBeUndefined();
 });

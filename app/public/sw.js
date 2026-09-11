@@ -7,10 +7,15 @@
  *    console keeps opening with no connection at all.
  *
  * Bump VERSION to invalidate everything after a breaking asset change.
- * (v2 purges v1 caches that could hold stale rewritten entries.)
+ * v3 separates the audience document from the app shell.
  */
-const VERSION = "ws-v2";
+const VERSION = "ws-v3";
 const SHELL = "/index.html";
+const AUDIENCE = "/audience.html";
+const blankAudience = () => new Response(
+  '<!doctype html><html style="background:#000"><title>WaveScope Audience Output</title></html>',
+  { headers: { "content-type": "text/html; charset=utf-8" } },
+);
 
 /**
  * Only cache what the URL claims to be. The host rewrites EVERY unknown path
@@ -58,6 +63,22 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // fonts etc. stay on the network
+
+  // An audience navigation must never cache over, or fall back to, the console.
+  // Also reject a host's 200 SPA rewrite if this static file is missing.
+  if (req.mode === "navigate" && url.pathname === AUDIENCE) {
+    e.respondWith(
+      fetch(req).then(async (res) => {
+        if (!res.ok || !(await res.clone().text()).includes('<video id="audience"')) {
+          return blankAudience();
+        }
+        const cache = await caches.open(VERSION);
+        await cache.put(AUDIENCE, res.clone()).catch(() => {});
+        return res;
+      }).catch(() => caches.match(AUDIENCE).then((hit) => hit || blankAudience())),
+    );
+    return;
+  }
 
   // App navigations: freshest shell when online, cached shell offline.
   if (req.mode === "navigate") {

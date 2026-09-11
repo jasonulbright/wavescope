@@ -135,6 +135,7 @@ function VizPage() {
   const [milkPlaying, setMilkPlaying] = useState("");
   const [milkNames, setMilkNames] = useState<string[]>([]);
   const [milkLoading, setMilkLoading] = useState(false);
+  const engineSwitch = useRef(0);
   const [customMilk, setCustomMilk] = useState<Record<string, unknown>>({});
   const milkFileRef = useRef<HTMLInputElement>(null);
   // Imperative preset surface of the live MilkdropCanvas (lab + morph deck).
@@ -571,6 +572,7 @@ function VizPage() {
 
   /** Switch between the built-in math engine and the MilkDrop engine. */
   const toggleMilk = useCallback(async () => {
+    const request = ++engineSwitch.current;
     if (milk) {
       setMilk(false);
       return;
@@ -579,6 +581,7 @@ function VizPage() {
     setError(null);
     try {
       const bundle = await loadMilkdrop();
+      if (request !== engineSwitch.current) return;
       milkBundleRef.current = bundle;
       setMilkNames(bundle.presetNames);
       setMilkPreset(
@@ -590,14 +593,15 @@ function VizPage() {
       setGpu(false);
       setMilk(true);
     } catch {
-      setError("The MilkDrop engine failed to load. Check the connection and try again.");
+      if (request === engineSwitch.current) setError("The MilkDrop engine failed to load. Check the connection and try again.");
     } finally {
-      setMilkLoading(false);
+      if (request === engineSwitch.current) setMilkLoading(false);
     }
   }, [milk]);
 
   /** Toggle the projectM (WASM) engine: runs raw .milk presets natively. */
   const togglePm = useCallback(() => {
+    engineSwitch.current++; setMilkLoading(false);
     if (pm) {
       setPm(false);
       return;
@@ -611,6 +615,7 @@ function VizPage() {
 
   /** Toggle the WebGPU engine (GPU-native per-pixel shader modes). */
   const toggleGpu = useCallback(() => {
+    engineSwitch.current++; setMilkLoading(false);
     if (gpu) {
       setGpu(false);
       return;
@@ -623,6 +628,7 @@ function VizPage() {
 
   /** Return to WaveScope's built-in visualizers (turn off every alternate engine). */
   const selectBuiltin = useCallback(() => {
+    engineSwitch.current++; setMilkLoading(false);
     setError(null);
     setGpu(false);
     setPm(false);
@@ -792,7 +798,10 @@ function VizPage() {
         setMilk(true);
       });
     }
-    hops[Math.floor(Math.random() * hops.length)]?.();
+    if (hops.length) {
+      engineSwitch.current++; setMilkLoading(false);
+      hops[Math.floor(Math.random() * hops.length)]();
+    }
   }, [autoModes, autoGpu, gpuAvailable, pmAvailable, autoPm, milkNames, autoMilk]);
 
   // Shuffle: hop to a random OTHER mode every shuffleSec seconds, and
@@ -1003,6 +1012,20 @@ function VizPage() {
 
   // Keyboard map.
   useEffect(() => {
+    const onPlayerKey = (e: KeyboardEvent) => {
+      if (embed || follow || e.key !== "F5") return;
+      // F5 is the file player even when a deck control has focus. Letting the
+      // browser reload here would end an active performance.
+      e.preventDefault();
+      if (!labOpen) {
+        setSpotifyOpen(false);
+        setSettingsOpen(false);
+        setHelpOpen(false);
+        setBrowserOpen(false);
+        setOutputOpen(false);
+        setPlayerOpen(true);
+      }
+    };
     const onKey = (e: KeyboardEvent) => {
       if (embed || e.defaultPrevented || e.isComposing) return;
       if (labOpen) return; // The editor owns Escape and save/discard handling.
@@ -1040,10 +1063,6 @@ function VizPage() {
         case "o":
         case "O":
           if (!follow) setOutputOpen(true);
-          break;
-        case "F5":
-          e.preventDefault();
-          if (!follow) setPlayerOpen(true);
           break;
         case "b":
         case "B":
@@ -1100,7 +1119,11 @@ function VizPage() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onPlayerKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onPlayerKey, true);
+    };
   }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused, pm, pmPlaying.text, outputOpen]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.

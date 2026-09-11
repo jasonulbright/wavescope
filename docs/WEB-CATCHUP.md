@@ -29,3 +29,14 @@ The engine/output changes also receive a dedicated review and correction pass.
 - Baseline restored suite: 19 tests pass; production build and prerender pass.
 - Real Spotify account authorization and physical projector operation require
   a user session; local checks must identify their coverage separately.
+
+## Validation log
+
+- Spotify: 13 regression cases plus production build. Strict PKCE callbacks,
+  expiry/replay rejection, invalid responses, refresh concurrency and late
+  disconnect/configuration responses. Setup requires an explicit Client ID.
+- Input/editor: reproduced the published Spotify Right-arrow leak and verified
+  it no longer changes the local visual. Escape closes the correct dialog.
+  Edited a real Butterchurn preset; Escape offers save/discard/keep editing,
+  cancellation preserves the draft, and duplicate Save As preserves the draft
+  with an actionable error. Persistence regressions cover storage failure.

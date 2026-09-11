@@ -22,6 +22,7 @@ import { WorkerCanvas, workerCanvasSupported } from "../components/ws/WorkerCanv
 import type { PaletteRef } from "../lib/viz/render-worker";
 import { MilkdropCanvas, type MilkdropApi } from "../components/ws/MilkdropCanvas";
 import { PresetLab } from "../components/ws/PresetLab";
+import { saveNewPreset } from "../lib/viz/preset-library";
 import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
@@ -738,7 +739,7 @@ function VizPage() {
   // optionally to a random palette from the user's include list. Negative
   // interval = auto-DJ (engines hop too). VJ mode has its own effect below.
   useEffect(() => {
-    if (!shuffleSec || shuffleSec === VJ_SEC) return;
+    if (!shuffleSec || shuffleSec === VJ_SEC || labOpen) return;
     const iv = setInterval(() => {
       if (shuffleSec < 0) {
         djHop();
@@ -791,14 +792,14 @@ function VizPage() {
       }
     }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
-  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, morphSec, pm, pmNames, gpu, djHop]);
+  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, morphSec, pm, pmNames, gpu, djHop, labOpen]);
 
   // Auto-VJ: audio-driven switching instead of a timer. Bass energy feeds a
   // fast and a slow envelope; the fast one spiking over the slow one is a
   // drop → hard cut to another preset/mode. A long stretch without a drop
   // morphs gently instead (MilkDrop blends 5 s; other engines just switch).
   useEffect(() => {
-    if (shuffleSec !== VJ_SEC) return;
+    if (shuffleSec !== VJ_SEC || labOpen) return;
     let slow = 0;
     let fast = 0;
     let seeded = false;
@@ -867,7 +868,7 @@ function VizPage() {
       if (held > LULL_MS) hop(5); // lull: slow morph
     }, 150);
     return () => clearInterval(iv);
-  }, [shuffleSec, milk, milkAll, pm, pmNames, gpu, availableModes, getFrame]);
+  }, [shuffleSec, milk, milkAll, pm, pmNames, gpu, availableModes, getFrame, labOpen]);
 
   const cycleShuffle = useCallback(() => {
     setShuffleSec((cur) => {
@@ -939,10 +940,19 @@ function VizPage() {
   // Keyboard map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (embed || e.defaultPrevented || e.isComposing) return;
+      if (labOpen) return; // The editor owns Escape and save/discard handling.
+      if (spotifyOpen || settingsOpen || helpOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setSpotifyOpen(false); setSettingsOpen(false); setHelpOpen(false);
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement ||
-        e.target instanceof HTMLTextAreaElement
+        e.target instanceof HTMLElement &&
+        e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')
       )
         return;
       switch (e.key) {
@@ -998,7 +1008,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1649,12 +1659,9 @@ function VizPage() {
               ? milkApiRef.current.applyPreset(edited, 0)
               : Promise.reject(new Error("The engine is not running; arm a source first."))
           }
-          onSaveAs={(name, preset) => {
-            setCustomMilk((cur) => {
-              const next = { ...cur, [name]: preset };
-              saveCustomMilkPresets(next);
-              return next;
-            });
+          onSaveAs={async (name, preset) => {
+            const next = saveNewPreset(name, preset, customMilk, milkNames, saveCustomMilkPresets);
+            setCustomMilk(next);
             setMilkPreset(name);
           }}
           onClose={() => setLabOpen(false)}

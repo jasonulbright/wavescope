@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { presetErrorMessage } from "../../lib/viz/milkdrop";
+import { useFocusTrap } from "../../hooks/use-focus-trap";
 
 /**
  * The preset lab: edits the active MilkDrop preset's eel equations in place.
@@ -17,7 +18,7 @@ interface PresetLabProps {
   /** Compile + show an edited preset now (hard cut). Rejects on eel errors. */
   onApply: (edited: Record<string, unknown>) => Promise<void>;
   /** Persist the edit as a custom preset and switch the picker to it. */
-  onSaveAs: (name: string, preset: Record<string, unknown>) => void;
+  onSaveAs: (name: string, preset: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }
 
@@ -64,6 +65,17 @@ export function PresetLab({
   const [name, setName] = useState("");
   const [status, setStatus] = useState<LabStatus>({ kind: "idle" });
   const busyRef = useRef(false);
+  const [savedEqs, setSavedEqs] = useState("");
+  const [confirmClose, setConfirmClose] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  const dirty = JSON.stringify(eqs) !== savedEqs;
+  const requestClose = () => { if (busyRef.current) return; if (dirty) setConfirmClose(true); else onClose(); };
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   // Re-seed the editor whenever the picked preset changes — by name OR by
   // object identity, so re-importing a file under the open preset's name
@@ -72,9 +84,24 @@ export function PresetLab({
     const next: Record<string, string> = {};
     for (const f of EEL_FIELDS) next[f.key] = eelField(base, f.key);
     setEqs(next);
+    setSavedEqs(JSON.stringify(next));
     setName(`${presetName} (edit)`);
     setStatus({ kind: "idle" });
   }, [presetName, base]);
+
+  const save = async (closeAfter = false) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setStatus({ kind: "busy" });
+    try {
+      await onSaveAs(name.trim(), buildEdited(base, eqs));
+      setSavedEqs(JSON.stringify(eqs));
+      setStatus({ kind: "idle" });
+      setConfirmClose(false);
+      if (closeAfter) onClose();
+    } catch (e) { setStatus({ kind: "err", message: presetErrorMessage(e) }); }
+    finally { busyRef.current = false; }
+  };
 
   const apply = () => {
     if (busyRef.current) return;
@@ -102,11 +129,17 @@ export function PresetLab({
   };
 
   return (
+    <div className="absolute inset-0 z-20 bg-black/30">
     <div
+      ref={trapRef}
       className="absolute bottom-24 right-4 top-16 z-10 flex w-[380px] max-w-[85vw] flex-col border border-white/15 bg-scope/95 p-4"
-      role="region"
+      role="dialog"
+      aria-modal="true"
       aria-label="Preset lab"
       onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") { e.preventDefault(); if (confirmClose) setConfirmClose(false); else requestClose(); }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); }
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
           e.preventDefault();
           apply();
@@ -114,9 +147,9 @@ export function PresetLab({
       }}
     >
       <div className="flex items-baseline justify-between">
-        <p className="readout text-ultra-soft">PRESET LAB</p>
+        <p className="readout text-ultra-soft">PRESET LAB{dirty ? " *" : ""}</p>
         <button
-          onClick={onClose}
+          onClick={requestClose}
           aria-label="Close the preset lab"
           className="border border-white/15 px-2 py-1 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white"
         >
@@ -187,13 +220,23 @@ export function PresetLab({
             className="min-w-0 flex-1 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/85"
           />
           <button
-            onClick={() => name.trim() && onSaveAs(name.trim(), buildEdited(base, eqs))}
+            onClick={() => void save()}
+            disabled={status.kind === "busy"}
             className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
           >
-            save
+            save as new
           </button>
         </div>
       </div>
+      {confirmClose ? <div role="group" aria-label="Unsaved changes" className="mt-4 border border-ultra p-3 font-meter text-xs">
+        <p>Save your changes before closing?</p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button onClick={() => void save(true)} disabled={status.kind === "busy"}>Save and close</button>
+          <button onClick={onClose} disabled={status.kind === "busy"}>Discard changes</button>
+          <button onClick={() => setConfirmClose(false)}>Keep editing</button>
+        </div>
+      </div> : null}
+    </div>
     </div>
   );
 }

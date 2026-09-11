@@ -39,7 +39,10 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
       const firstEl = items[0];
       const lastEl = items[items.length - 1];
       const activeEl = document.activeElement;
-      if (e.shiftKey && activeEl === firstEl) {
+      if (!container.contains(activeEl)) {
+        e.preventDefault();
+        (e.shiftKey ? lastEl : firstEl).focus();
+      } else if (e.shiftKey && activeEl === firstEl) {
         e.preventDefault();
         lastEl.focus();
       } else if (!e.shiftKey && activeEl === lastEl) {
@@ -48,9 +51,9 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
       }
     };
 
-    container.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      container.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       // Restore focus to the trigger when the overlay closes.
       previouslyFocused?.focus?.();
     };

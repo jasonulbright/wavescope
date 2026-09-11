@@ -164,6 +164,8 @@ function VizPage() {
   const linkRef = useRef<PcmLink | null>(null);
   const pcmStopRef = useRef<(() => void) | null>(null);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
+  const [spotifyHint, setSpotifyHint] = useState<string | null>(null);
+  const spotifyCallbackStarted = useRef(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
   const calmRef = useRef(false);
   const settingsLoaded = useRef(false);
@@ -319,10 +321,12 @@ function VizPage() {
   useEffect(() => {
     if (follow) return;
     const params = new URLSearchParams(location.search);
-    const code = params.get("code");
-    if (!code) return;
-    void completeSpotifyAuth(code, params.get("state")).then(() => {
-      history.replaceState(null, "", "/viz");
+    if ((!params.has("code") && !params.has("error")) || spotifyCallbackStarted.current) return;
+    spotifyCallbackStarted.current = true;
+    history.replaceState(null, "", "/viz");
+    void completeSpotifyAuth(params).catch((e) => {
+      setSpotifyHint(e instanceof Error ? e.message : "Spotify sign-in failed. Connect again.");
+    }).finally(() => {
       setSpotifyOpen(true);
     });
   }, [follow]);
@@ -1660,6 +1664,7 @@ function VizPage() {
       {/* Spotify overlay. */}
       {spotifyOpen ? (
         <SpotifyPanel
+          initialHint={spotifyHint}
           onCapture={() => void arm("system")}
           onClose={() => setSpotifyOpen(false)}
         />

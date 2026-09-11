@@ -13,6 +13,7 @@ interface SpotifyPanelProps {
   /** Arms the system-audio capture (must be called from this click). */
   onCapture: () => void;
   onClose: () => void;
+  initialHint?: string | null;
 }
 
 /**
@@ -21,14 +22,20 @@ interface SpotifyPanelProps {
  *  - Connected: with the user's own (free) Spotify app client ID, the play
  *    button starts playback on their device remotely, then capture.
  */
-export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
+export function SpotifyPanel({ onCapture, onClose, initialHint }: SpotifyPanelProps) {
   const [connected, setConnected] = useState(() => spotifyConnected());
   const [clientId, setClientId] = useState(() => loadSpotify()?.clientId ?? "");
   const [busy, setBusy] = useState(false);
-  const [hint, setHint] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(initialHint ?? null);
   const [playing, setPlaying] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(true);
   const trapRef = useFocusTrap<HTMLDivElement>(true);
+
+  const connect = async () => {
+    setBusy(true);
+    try { await beginSpotifyAuth(clientId.trim()); }
+    catch (e) { setHint(e instanceof Error ? e.message : "Could not start Spotify sign-in. Allow browser storage and try again."); setBusy(false); }
+  };
 
   const play = async () => {
     setBusy(true);
@@ -41,9 +48,9 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
       } else {
         setHint(res.hint ?? "Playback did not start.");
       }
-    } catch {
-      setHint("Spotify session expired. Reconnect below.");
-      setConnected(false);
+    } catch (e) {
+      setHint(e instanceof Error ? e.message : "Spotify could not be reached. Try again.");
+      setConnected(spotifyConnected());
     } finally {
       setBusy(false);
     }
@@ -100,10 +107,12 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
             ) : null}
             <button
               onClick={() => {
-                disconnectSpotify();
-                setConnected(false);
-                setPlaying(false);
-                setHint(null);
+                try {
+                  disconnectSpotify();
+                  setConnected(false);
+                  setPlaying(false);
+                  setHint(null);
+                } catch { setHint("Could not clear Spotify storage. Check browser storage permissions and retry."); }
               }}
               className="mt-5 font-meter text-xs text-white/40 hover:text-white/70"
             >
@@ -145,22 +154,23 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
                 Spotify Premium.
               </p>
               <button
-                onClick={() => void beginSpotifyAuth(clientId.trim() || undefined)}
+                onClick={() => void connect()}
+                disabled={busy || !clientId.trim()}
                 className="mt-3 w-full border border-ultra bg-ultra/20 px-5 py-3 font-meter text-sm font-bold text-ultra-soft hover:bg-ultra/35 active:scale-[0.99]"
               >
-                Connect Spotify
+                {busy ? "Connecting…" : "Connect Spotify"}
               </button>
               <button
                 onClick={() => setSetupOpen((v) => !v)}
                 className="mt-3 font-meter text-xs text-white/40 hover:text-white/80"
               >
-                {setupOpen ? "hide" : "use your own Spotify app (advanced)"}
+                {setupOpen ? "hide setup" : "Spotify app setup"}
               </button>
               {setupOpen ? (
                 <div className="mt-2">
                   <p className="font-meter text-xs leading-relaxed text-white/50">
-                    Optional: use your own Spotify developer app instead of the
-                    built-in one (e.g. to avoid the shared app's user limit).
+                    Enter your own Spotify developer app's Client ID. WaveScope
+                    does not ship a shared app ID. Audio capture needs no sign-in.
                   </p>
                   <ol className="mt-2 list-decimal space-y-1.5 pl-5 font-meter text-xs leading-relaxed text-white/60">
                     <li>Go to developer.spotify.com/dashboard and create an app (any name).</li>
@@ -171,6 +181,7 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
                     <li>Paste the app's Client ID below, then Connect Spotify.</li>
                   </ol>
                   <input
+                    aria-label="Spotify client ID"
                     type="text"
                     value={clientId}
                     onChange={(e) => setClientId(e.target.value)}
@@ -183,6 +194,7 @@ export function SpotifyPanel({ onCapture, onClose }: SpotifyPanelProps) {
           </div>
         )}
 
+        {!connected && hint ? <p role="status" className="mt-4 font-meter text-xs text-white/70">{hint}</p> : null}
         <p className="mt-6 border-t border-white/10 pt-4 font-meter text-xs leading-relaxed text-white/40">
           Spotify's stream itself is DRM protected, so WaveScope listens
           through the system-audio capture. Your Spotify credentials and

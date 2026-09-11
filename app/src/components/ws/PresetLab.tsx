@@ -50,9 +50,7 @@ function buildEdited(
 ): Record<string, unknown> {
   if (format === "milk") return { raw: eqs.raw ?? "" };
   const copy =
-    base && typeof base === "object"
-      ? (structuredClone(base) as Record<string, unknown>)
-      : {};
+    base && typeof base === "object" ? (structuredClone(base) as Record<string, unknown>) : {};
   for (const f of EEL_FIELDS) copy[f.key] = eqs[f.key];
   return copy;
 }
@@ -74,10 +72,17 @@ export function PresetLab({
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   const dirty = JSON.stringify(eqs) !== savedEqs;
   const fields = format === "milk" ? [{ key: "raw", label: "MILK SOURCE" }] : EEL_FIELDS;
-  const requestClose = () => { if (busyRef.current) return; if (dirty) setConfirmClose(true); else onClose(); };
+  const requestClose = () => {
+    if (busyRef.current) return;
+    if (dirty) setConfirmClose(true);
+    else onClose();
+  };
   useEffect(() => {
     if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
@@ -87,7 +92,8 @@ export function PresetLab({
   // refreshes the textareas instead of leaving stale eel to overwrite it.
   useEffect(() => {
     const next: Record<string, string> = {};
-    for (const f of format === "milk" ? [{ key: "raw" }] : EEL_FIELDS) next[f.key] = eelField(base, f.key);
+    for (const f of format === "milk" ? [{ key: "raw" }] : EEL_FIELDS)
+      next[f.key] = eelField(base, f.key);
     setEqs(next);
     setSavedEqs(JSON.stringify(next));
     setName(`${presetName} (edit)`);
@@ -104,8 +110,11 @@ export function PresetLab({
       setStatus({ kind: "idle" });
       setConfirmClose(false);
       if (closeAfter) onClose();
-    } catch (e) { setStatus({ kind: "err", message: presetErrorMessage(e) }); }
-    finally { busyRef.current = false; }
+    } catch (e) {
+      setStatus({ kind: "err", message: presetErrorMessage(e) });
+    } finally {
+      busyRef.current = false;
+    }
   };
 
   const apply = () => {
@@ -113,7 +122,8 @@ export function PresetLab({
     busyRef.current = true;
     setStatus({ kind: "busy" });
     const t0 = performance.now();
-    onApply(buildEdited(base, eqs, format))
+    void Promise.resolve()
+      .then(() => onApply(buildEdited(base, eqs, format)))
       .then(() => setStatus({ kind: "ok", ms: Math.round(performance.now() - t0) }))
       .catch((e) => setStatus({ kind: "err", message: presetErrorMessage(e) }))
       .finally(() => {
@@ -122,9 +132,12 @@ export function PresetLab({
   };
 
   const exportJson = () => {
-    const blob = new Blob([format === "milk" ? eqs.raw ?? "" : JSON.stringify(buildEdited(base, eqs), null, 2)], {
-      type: format === "milk" ? "text/plain" : "application/json",
-    });
+    const blob = new Blob(
+      [format === "milk" ? (eqs.raw ?? "") : JSON.stringify(buildEdited(base, eqs), null, 2)],
+      {
+        type: format === "milk" ? "text/plain" : "application/json",
+      },
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -135,113 +148,130 @@ export function PresetLab({
 
   return (
     <div className="absolute inset-0 z-20 bg-black/30 text-white">
-    <div
-      ref={trapRef}
-      className={`absolute bottom-8 right-4 top-8 z-10 flex ${format === "milk" ? "w-[680px]" : "w-[420px]"} max-w-[90vw] flex-col border border-white/15 bg-scope/95 p-4`}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Preset lab"
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape") { e.preventDefault(); if (confirmClose) setConfirmClose(false); else requestClose(); }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); }
-        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-          e.preventDefault();
-          apply();
-        }
-      }}
-    >
-      <div className="flex items-baseline justify-between">
-        <p className="readout text-ultra-soft">PRESET LAB{dirty ? " *" : ""}</p>
-        <button
-          onClick={requestClose}
-          aria-label="Close the preset lab"
-          className="border border-white/15 px-2 py-1 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white"
-        >
-          close
-        </button>
-      </div>
-      <p className="mt-1 truncate font-meter text-xs text-white/40" title={presetName}>
-        {presetName}
-      </p>
-
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
-        {fields.map((f) => (
-          <label key={f.key} className="flex flex-col gap-1">
-            <span className="readout text-white/40">{f.label}</span>
-            <textarea
-              value={eqs[f.key] ?? ""}
-              onChange={(e) =>
-                setEqs((cur) => ({ ...cur, [f.key]: e.target.value }))
-              }
-              spellCheck={false}
-              rows={f.key === "raw" ? 24 : f.key === "init_eqs_eel" ? 3 : 7}
-              className="resize-y border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs leading-relaxed text-white/85 placeholder:text-white/25"
-              placeholder="// eel"
-            />
-          </label>
-        ))}
-      </div>
-
-      <div className="mt-3 border-t border-white/10 pt-3">
-        <p
-          className={`min-h-4 font-meter text-xs ${
-            status.kind === "err"
-              ? "text-red-300"
-              : status.kind === "ok"
-                ? "text-ultra-soft"
-                : "text-white/40"
-          }`}
-          role="status"
-        >
-          {status.kind === "err"
-            ? status.message
-            : status.kind === "ok"
-              ? `compiled in ${status.ms} ms`
-              : status.kind === "busy"
-                ? "compiling…"
-                : "Ctrl+Enter applies"}
+      <div
+        ref={trapRef}
+        className={`absolute bottom-8 right-4 top-8 z-10 flex ${format === "milk" ? "w-[680px]" : "w-[420px]"} max-w-[90vw] flex-col border border-white/15 bg-scope/95 p-4`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Preset lab"
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Escape") {
+            e.preventDefault();
+            if (confirmClose) setConfirmClose(false);
+            else requestClose();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            void save();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            apply();
+          }
+        }}
+      >
+        <div className="flex items-baseline justify-between">
+          <p className="readout text-ultra-soft">PRESET LAB{dirty ? " *" : ""}</p>
+          <button
+            onClick={requestClose}
+            aria-label="Close the preset lab"
+            className="border border-white/15 px-2 py-1 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white"
+          >
+            close
+          </button>
+        </div>
+        <p className="mt-1 truncate font-meter text-xs text-white/40" title={presetName}>
+          {presetName}
         </p>
-        <div className="mt-2 flex items-center gap-1.5">
-          <button
-            onClick={apply}
-            disabled={status.kind === "busy"}
-            className="border border-ultra bg-ultra/20 px-3 py-1.5 font-meter text-xs text-ultra-soft hover:bg-ultra/35 active:scale-[0.97] disabled:opacity-50"
-          >
-            apply
-          </button>
-          <button
-            onClick={exportJson}
-            className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
-          >
-            export
-          </button>
+
+        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+          {fields.map((f) => (
+            <label key={f.key} className="flex flex-col gap-1">
+              <span className="readout text-white/40">{f.label}</span>
+              <textarea
+                readOnly={status.kind === "busy"}
+                value={eqs[f.key] ?? ""}
+                onChange={(e) => setEqs((cur) => ({ ...cur, [f.key]: e.target.value }))}
+                spellCheck={false}
+                rows={f.key === "raw" ? 24 : f.key === "init_eqs_eel" ? 3 : 7}
+                className="resize-y border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs leading-relaxed text-white/85 placeholder:text-white/25"
+                placeholder="// eel"
+              />
+            </label>
+          ))}
         </div>
-        <div className="mt-2 flex items-center gap-1.5">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Name for the saved preset"
-            className="min-w-0 flex-1 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/85"
-          />
-          <button
-            onClick={() => void save()}
-            disabled={status.kind === "busy"}
-            className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <p
+            className={`min-h-4 font-meter text-xs ${
+              status.kind === "err"
+                ? "text-red-300"
+                : status.kind === "ok"
+                  ? "text-ultra-soft"
+                  : "text-white/40"
+            }`}
+            role="status"
           >
-            save as new
-          </button>
+            {status.kind === "err"
+              ? status.message
+              : status.kind === "ok"
+                ? `compiled in ${status.ms} ms`
+                : status.kind === "busy"
+                  ? "compiling…"
+                  : "Ctrl+Enter applies"}
+          </p>
+          <div className="mt-2 flex items-center gap-1.5">
+            <button
+              onClick={apply}
+              disabled={status.kind === "busy"}
+              className="border border-ultra bg-ultra/20 px-3 py-1.5 font-meter text-xs text-ultra-soft hover:bg-ultra/35 active:scale-[0.97] disabled:opacity-50"
+            >
+              apply
+            </button>
+            <button
+              onClick={exportJson}
+              className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+            >
+              export
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            <input
+              readOnly={status.kind === "busy"}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Name for the saved preset"
+              className="min-w-0 flex-1 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/85"
+            />
+            <button
+              onClick={() => void save()}
+              disabled={status.kind === "busy"}
+              className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
+            >
+              save as new
+            </button>
+          </div>
         </div>
+        {confirmClose ? (
+          <div
+            role="group"
+            aria-label="Unsaved changes"
+            className="mt-4 border border-ultra p-3 font-meter text-xs"
+          >
+            <p>Save your changes before closing?</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button onClick={() => void save(true)} disabled={status.kind === "busy"}>
+                Save and close
+              </button>
+              <button onClick={onClose} disabled={status.kind === "busy"}>
+                Discard changes
+              </button>
+              <button onClick={() => setConfirmClose(false)}>Keep editing</button>
+            </div>
+          </div>
+        ) : null}
       </div>
-      {confirmClose ? <div role="group" aria-label="Unsaved changes" className="mt-4 border border-ultra p-3 font-meter text-xs">
-        <p>Save your changes before closing?</p>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button onClick={() => void save(true)} disabled={status.kind === "busy"}>Save and close</button>
-          <button onClick={onClose} disabled={status.kind === "busy"}>Discard changes</button>
-          <button onClick={() => setConfirmClose(false)}>Keep editing</button>
-        </div>
-      </div> : null}
-    </div>
     </div>
   );
 }

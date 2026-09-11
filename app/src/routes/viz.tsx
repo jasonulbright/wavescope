@@ -169,7 +169,7 @@ function VizPage() {
   const [pm, setPm] = useState(false);
   const [pmAvailable, setPmAvailable] = useState<boolean | null>(null);
   const [pmPreset, setPmPreset] = useState(BUNDLED_MILK[0]?.name ?? "");
-  const [pmResolved, setPmResolved] = useState({ name: "", text: "" });
+  const [pmResolved, setPmResolved] = useState({ name: "", text: "", blendSec: 0 });
   const pmText = pmResolved.text;
   const [pmPlaying, setPmPlaying] = useState({ name: "", text: "" });
   const pmApiRef = useRef<ProjectMApi | null>(null);
@@ -296,16 +296,20 @@ function VizPage() {
   // Resolve the current projectM preset to its raw .milk text.
   useEffect(() => {
     if (!pm) return;
+    // Capture transition intent with the request, before asynchronous fetch.
+    // A superseding direct pick must not inherit a cancelled morph.
+    const blendSec = pmBlendRef.current ?? 0;
+    pmBlendRef.current = null;
     let cancelled = false;
     const bundled = BUNDLED_MILK.find((b) => b.name === pmPreset);
     if (bundled) {
       void fetchMilkText(bundled.url).then((t) => {
-        if (!cancelled) setPmResolved({ name: pmPreset, text: t });
+        if (!cancelled) setPmResolved({ name: pmPreset, text: t, blendSec });
       }).catch((e) => {
         if (!cancelled) { pmBlendRef.current = null; setError(e instanceof Error ? e.message : "The preset could not be read."); setPmPreset(pmPlaying.name || BUNDLED_MILK[0].name); }
       });
     } else if (pmCustom[pmPreset] !== undefined) {
-      setPmResolved({ name: pmPreset, text: pmCustom[pmPreset] });
+      setPmResolved({ name: pmPreset, text: pmCustom[pmPreset], blendSec });
     }
     return () => {
       cancelled = true;
@@ -1209,7 +1213,7 @@ function VizPage() {
           presetText={pmText}
           presetName={pmResolved.name}
           apiRef={pmApiRef}
-          blendSecRef={pmBlendRef}
+          blendSec={pmResolved.blendSec}
           onPresetLoaded={(name, text) => setPmPlaying((cur) => cur.name === name && cur.text === text ? cur : { name, text })}
           onPresetError={(message) => { setError(message); setPmPreset(pmPlaying.name || BUNDLED_MILK[0].name); }}
           resolutionHeight={renderHeight}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { AudioGraphSource } from "../../lib/viz/types";
+import { ENGINE_RESTARTED, PresetQueue } from "../../lib/viz/preset-queue";
 import {
   isLegacyJsPreset,
   isLoadablePreset,
@@ -22,10 +23,8 @@ export interface MilkdropApi {
 
 const LEGACY_PRESET_MESSAGE =
   "This preset carries compiled-JS equations (old converter); the engine runs eel-source presets only.";
-const NOT_EEL_MESSAGE =
-  "This file has no eel equations; it is not a Butterchurn preset.";
-const RESTARTED_MESSAGE =
-  "The engine restarted before this preset applied; try again.";
+const NOT_EEL_MESSAGE = "This file has no eel equations; it is not a Butterchurn preset.";
+const RESTARTED_MESSAGE = ENGINE_RESTARTED;
 
 interface MilkdropCanvasProps {
   /** Console AudioEngine or a companion's PcmLink; both expose the graph. */
@@ -72,6 +71,7 @@ export function MilkdropCanvas({
   const vizRef = useRef<ButterchurnVisualizer | null>(null);
   const bundleRef = useRef<MilkdropBundle | null>(null);
   const presetRef = useRef(presetName);
+  presetRef.current = presetName;
   const extraRef = useRef(extraPresets);
   extraRef.current = extraPresets;
   const onPresetErrorRef = useRef(onPresetError);
@@ -81,25 +81,20 @@ export function MilkdropCanvas({
   onLoadedRef.current = onPresetLoaded;
   // Preset loads compile eel to WASM asynchronously; the queue keeps them in
   // submission order so a slow compile cannot land after a newer pick.
-  const loadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const loadQueueRef = useRef(new PresetQueue(() => vizRef.current));
 
   const applyPreset = useCallback((preset: unknown, blendSec: number) => {
     // Bind the visualizer at submission time: an entry queued for a
     // torn-down generation rejects instead of loading into its successor
     // (or silently reporting success for a load that never happened).
-    const viz = vizRef.current;
-    const run = loadQueueRef.current.then(() => {
-      if (!viz || vizRef.current !== viz) throw new Error(RESTARTED_MESSAGE);
+    return loadQueueRef.current.run(async (viz) => {
       if (!isLoadablePreset(preset)) {
-        throw new Error(
-          isLegacyJsPreset(preset) ? LEGACY_PRESET_MESSAGE : NOT_EEL_MESSAGE,
-        );
+        throw new Error(isLegacyJsPreset(preset) ? LEGACY_PRESET_MESSAGE : NOT_EEL_MESSAGE);
       }
-      return viz.loadPreset(preset, blendSec);
+      await viz.loadPreset(preset, blendSec);
+      if (vizRef.current === viz && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+        viz.render();
     });
-    // Keep the queue alive past a failed load; callers see the rejection.
-    loadQueueRef.current = run.catch(() => {});
-    return run;
   }, []);
 
   useEffect(() => {
@@ -116,7 +111,7 @@ export function MilkdropCanvas({
     // Each visualizer generation owns its queue: a load still in flight on
     // the previous generation must not delay this one's first frame or
     // surface its late rejection here.
-    loadQueueRef.current = Promise.resolve();
+    loadQueueRef.current.reset();
     let disposed = false;
     let raf = 0;
     let frames = 0;
@@ -176,7 +171,10 @@ export function MilkdropCanvas({
         try {
           // First frame waits for the WASM compile so it shows the preset.
           await applyPreset(preset, 0);
-          if (!disposed) { loaded.current = { name, preset }; onLoadedRef.current?.(name); }
+          if (!disposed) {
+            loaded.current = { name, preset };
+            onLoadedRef.current?.(name);
+          }
         } catch (e) {
           if (!disposed) onPresetErrorRef.current?.(presetErrorMessage(e));
         }
@@ -242,8 +240,7 @@ export function MilkdropCanvas({
       // getContext would CREATE a context here, and losing it would kill the
       // visualizer the next effect run builds on this same element.
       if (viz) {
-        const gl =
-          canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+        const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
         const loseCtx = gl?.getExtension("WEBGL_lose_context");
         loseCtx?.loseContext();
       }
@@ -257,7 +254,6 @@ export function MilkdropCanvas({
 
   // Preset switches blend in place, 2.7s crossfade like classic MilkDrop.
   useEffect(() => {
-    presetRef.current = presetName;
     // Consume the one-shot blend override on every switch attempt — even
     // one that bails below — so it can never leak onto a later change.
     const blend = blendSecRef?.current ?? 2.7;
@@ -268,14 +264,19 @@ export function MilkdropCanvas({
     if (!preset) return;
     if (loaded.current?.name === presetName && loaded.current.preset === preset) return;
     let stale = false;
-    applyPreset(preset, blend).then(() => {
-      if (!stale) { loaded.current = { name: presetName, preset }; onLoadedRef.current?.(presetName); }
-    }).catch((e) => {
-      // A visualizer restart re-applies presetRef.current itself; only
-      // surface real load failures.
-      if (!stale && !(e instanceof Error && e.message === RESTARTED_MESSAGE))
-        onPresetErrorRef.current?.(presetErrorMessage(e));
-    });
+    applyPreset(preset, blend)
+      .then(() => {
+        // Every successful queued load becomes the actual picture, even if a
+        // newer selection is waiting. Its failure must fall back to this one.
+        loaded.current = { name: presetName, preset };
+        onLoadedRef.current?.(presetName);
+      })
+      .catch((e) => {
+        // A visualizer restart re-applies presetRef.current itself; only
+        // surface real load failures.
+        if (!stale && !(e instanceof Error && e.message === RESTARTED_MESSAGE))
+          onPresetErrorRef.current?.(presetErrorMessage(e));
+      });
     return () => {
       stale = true;
     };

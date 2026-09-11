@@ -3,7 +3,9 @@ import type { AudioGraphSource } from "../../lib/viz/types";
 import { ProjectMEngine } from "../../lib/viz/projectm";
 import { presetErrorMessage } from "../../lib/viz/milkdrop";
 
-export interface ProjectMApi { applyPreset(text: string, blendSec: number): Promise<void> }
+export interface ProjectMApi {
+  applyPreset(text: string, blendSec: number): Promise<void>;
+}
 
 interface ProjectMCanvasProps {
   audio: AudioGraphSource;
@@ -11,7 +13,7 @@ interface ProjectMCanvasProps {
   presetText: string;
   presetName: string;
   apiRef: MutableRefObject<ProjectMApi | null>;
-  blendSecRef: MutableRefObject<number | null>;
+  blendSec: number;
   onPresetLoaded: (name: string, text: string) => void;
   onPresetError: (message: string) => void;
   resolutionHeight: number;
@@ -32,7 +34,11 @@ interface ProjectMCanvasProps {
 export function ProjectMCanvas({
   audio,
   presetText,
-  presetName, apiRef, blendSecRef, onPresetLoaded, onPresetError,
+  presetName,
+  apiRef,
+  blendSec,
+  onPresetLoaded,
+  onPresetError,
   resolutionHeight,
   onFps,
   onSize,
@@ -99,18 +105,27 @@ export function ProjectMCanvas({
         }
         engine = eng;
         engineRef.current = eng;
-        apiRef.current = { applyPreset: async (text, seconds) => {
-          if (disposed || engineRef.current !== eng) throw new Error("The engine restarted. Try applying again.");
-          eng.loadPresetText(text, seconds);
-          loadedText.current = text;
-        } };
+        apiRef.current = {
+          applyPreset: async (text, seconds) => {
+            if (disposed || engineRef.current !== eng)
+              throw new Error("The engine restarted. Try applying again.");
+            eng.loadPresetText(text, seconds);
+            loadedText.current = text;
+            if (reduceMotion) {
+              eng.feed(audio);
+              eng.render();
+            }
+          },
+        };
         try {
           if (presetRef.current) {
             eng.loadPresetText(presetRef.current, 0);
             loadedText.current = presetRef.current;
             callbacks.current.onPresetLoaded(nameRef.current, presetRef.current);
           }
-        } catch (e) { callbacks.current.onPresetError(presetErrorMessage(e)); }
+        } catch (e) {
+          callbacks.current.onPresetError(presetErrorMessage(e));
+        }
         onSize?.(`${canvas.width}x${canvas.height}`);
 
         ro = new ResizeObserver(() => {
@@ -126,9 +141,14 @@ export function ProjectMCanvas({
 
         const loop = (now: number) => {
           if (disposed) return;
+          try {
+            eng.feed(audio);
+            eng.render();
+          } catch {
+            callbacks.current.onError?.();
+            return;
+          }
           raf = requestAnimationFrame(loop);
-          eng.feed(audio);
-          eng.render();
           frames++;
           if (now - fpsWindowStart >= 1000) {
             onFps?.(frames);
@@ -163,15 +183,16 @@ export function ProjectMCanvas({
 
   // Preset switches crossfade in place without a WebGL rebuild.
   useEffect(() => {
-    const blend = blendSecRef.current ?? 0;
-    blendSecRef.current = null;
     if (!engineRef.current || !presetText) return;
     try {
-      if (loadedText.current !== presetText) engineRef.current.loadPresetText(presetText, blend);
+      if (loadedText.current !== presetText) engineRef.current.loadPresetText(presetText, blendSec);
       loadedText.current = presetText;
       callbacks.current.onPresetLoaded(presetName, presetText);
-    } catch (e) { callbacks.current.onPresetError(presetErrorMessage(e)); }
-  }, [presetText, presetName]);
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) engineRef.current.render();
+    } catch (e) {
+      callbacks.current.onPresetError(presetErrorMessage(e));
+    }
+  }, [presetText, presetName, blendSec]);
 
   return <canvas ref={canvasRef} className={className} />;
 }

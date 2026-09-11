@@ -129,7 +129,7 @@ export function PresetLab({
   };
 
   return (
-    <div className="absolute inset-0 z-20 bg-black/30">
+    <div className="absolute inset-0 z-20 bg-black/30 text-white">
     <div
       ref={trapRef}
       className="absolute bottom-24 right-4 top-16 z-10 flex w-[380px] max-w-[85vw] flex-col border border-white/15 bg-scope/95 p-4"

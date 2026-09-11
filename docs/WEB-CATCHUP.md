@@ -40,3 +40,11 @@ The engine/output changes also receive a dedicated review and correction pass.
   Edited a real Butterchurn preset; Escape offers save/discard/keep editing,
   cancellation preserves the draft, and duplicate Save As preserves the draft
   with an actionable error. Persistence regressions cover storage failure.
+- Search/favorites: searched for Nebula, selected it without changing Radial
+  Bars, saved it as a favorite, then explicitly played it. Empty searches
+  disable actions. Unit coverage checks engine separation and empty pools.
+- Audio transport: four lifecycle regressions cover pause/seek/replay, a late
+  file rejection, superseded capture cleanup, and stale playback errors.
+  Loaded an eight-second generated silent WAV in the real browser; verified
+  pause, seek while paused, disabling loop, EOF Replay and continued playback
+  after closing. Production build passes with 40 tests.

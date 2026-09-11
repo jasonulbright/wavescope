@@ -1,6 +1,11 @@
 import type { AudioFrame, SourceInfo, SourceKind } from "./types";
 import { analyzeFrame, newAnalysisState, type AnalysisState } from "./analyze";
 
+export interface FilePlayback {
+  name: string; position: number; duration: number; paused: boolean;
+  ended: boolean; loop: boolean; seekable: boolean; error: string | null;
+}
+
 /**
  * AudioEngine: one AnalyserNode fed by one of four sources.
  *
@@ -22,6 +27,8 @@ export class AudioEngine {
   /** Object URL backing mediaEl — revoked on detach or the file leaks. */
   private mediaUrl: string | null = null;
   private demoNodes: { stop: () => void } | null = null;
+  private sourceGeneration = 0;
+  private fileError: string | null = null;
 
   private fft = new Uint8Array(1024);
   private wave = new Uint8Array(2048);
@@ -65,6 +72,7 @@ export class AudioEngine {
       this.stream = null;
     }
     if (this.mediaEl) {
+      this.mediaEl.onerror = null;
       this.mediaEl.pause();
       this.mediaEl.src = "";
       this.mediaEl = null;
@@ -82,6 +90,7 @@ export class AudioEngine {
 
   /** Internal test signal: a slow chord progression with a synthetic kick. */
   startDemo() {
+    ++this.sourceGeneration;
     const ctx = this.ensureContext();
     const bus = ctx.createGain();
     bus.gain.value = 0.9;
@@ -138,10 +147,15 @@ export class AudioEngine {
   }
 
   async startMic(): Promise<void> {
+    const generation = ++this.sourceGeneration;
     const ctx = this.ensureContext();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
+    if (generation !== this.sourceGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new DOMException("Source selection was superseded.", "AbortError");
+    }
     const node = ctx.createMediaStreamSource(stream);
     this.attach(node, { kind: "mic", label: "Microphone" });
     this.stream = stream;
@@ -153,11 +167,16 @@ export class AudioEngine {
    * (stopping it ends the capture session in some browsers).
    */
   async startSystem(): Promise<void> {
+    const generation = ++this.sourceGeneration;
     const ctx = this.ensureContext();
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
+    if (generation !== this.sourceGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new DOMException("Source selection was superseded.", "AbortError");
+    }
     if (stream.getAudioTracks().length === 0) {
       for (const track of stream.getTracks()) track.stop();
       throw new Error(
@@ -170,7 +189,7 @@ export class AudioEngine {
     this.attach(node, { kind: "system", label: "System audio" });
     this.stream = stream;
     stream.getAudioTracks()[0].addEventListener("ended", () => {
-      if (this.source?.kind === "system") {
+      if (this.stream === stream) {
         this.detach();
         this.onSourceEnded?.();
       }
@@ -178,6 +197,7 @@ export class AudioEngine {
   }
 
   async startFile(file: File): Promise<void> {
+    const generation = ++this.sourceGeneration;
     const ctx = this.ensureContext();
     const el = new Audio();
     const url = URL.createObjectURL(file);
@@ -189,11 +209,18 @@ export class AudioEngine {
     this.attach(node, { kind: "file", label: file.name });
     this.mediaEl = el;
     this.mediaUrl = url;
+    this.fileError = null;
+    el.onerror = () => {
+      if (this.mediaEl === el) this.fileError = "The audio file could not be decoded or played. Choose another file or retry.";
+    };
     try {
       await el.play();
     } catch (err) {
       // Unplayable file (codec, autoplay policy): unwind the attach so the
       // engine isn't left armed on a dead source, and release the blob URL.
+      if (generation !== this.sourceGeneration || this.mediaEl !== el) {
+        throw new DOMException("Source selection was superseded.", "AbortError");
+      }
       this.detach();
       throw err;
     }
@@ -207,10 +234,12 @@ export class AudioEngine {
   }
 
   stop() {
+    ++this.sourceGeneration;
     this.detach();
   }
 
   dispose() {
+    ++this.sourceGeneration;
     this.detach();
     void this.ctx?.close();
     this.ctx = null;
@@ -220,6 +249,37 @@ export class AudioEngine {
   get active(): boolean {
     return this.source !== null;
   }
+
+  get filePlayback(): FilePlayback | null {
+    const el = this.mediaEl;
+    if (!el || this.source?.kind !== "file") return null;
+    const duration = Number.isFinite(el.duration) ? Math.max(0, el.duration) : 0;
+    return { name: this.source.label, position: el.currentTime || 0, duration,
+      paused: el.paused, ended: el.ended, loop: el.loop,
+      seekable: duration > 0 && el.seekable.length > 0, error: this.fileError };
+  }
+
+  async toggleFilePlayback() {
+    const el = this.mediaEl;
+    if (!el) return;
+    if (!el.paused && !el.ended) { el.pause(); return; }
+    try {
+      if (el.ended) el.currentTime = 0;
+      await el.play();
+      if (this.mediaEl === el) this.fileError = null;
+    } catch (e) {
+      if (this.mediaEl === el) this.fileError = e instanceof Error ? e.message : "Playback could not resume.";
+    }
+  }
+
+  seekFile(seconds: number) {
+    const el = this.mediaEl, info = this.filePlayback;
+    if (!el || !info?.seekable || !Number.isFinite(seconds)) return;
+    try { el.currentTime = Math.max(0, Math.min(info.duration, seconds)); }
+    catch { this.fileError = "This file could not seek to that position."; }
+  }
+
+  setFileLoop(loop: boolean) { if (this.mediaEl) this.mediaEl.loop = loop; }
 
   /** The audio context, for renderers that need the Web Audio graph (MilkDrop). */
   get audioContext(): AudioContext | null {

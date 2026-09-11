@@ -24,6 +24,7 @@ import { MilkdropCanvas, type MilkdropApi } from "../components/ws/MilkdropCanva
 import { PresetLab } from "../components/ws/PresetLab";
 import { saveNewPreset, favoriteKey, favoritePool, loadPresetPreferences } from "../lib/viz/preset-library";
 import { PresetBrowser } from "../components/ws/PresetBrowser";
+import { AudioPlayer } from "../components/ws/AudioPlayer";
 import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
@@ -185,6 +186,8 @@ function VizPage() {
   const calmRef = useRef(false);
   const settingsLoaded = useRef(false);
   const [source, setSource] = useState<SourceKind | null>(null);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const armGeneration = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [uiVisible, setUiVisible] = useState(true);
   const [controlsPinned, setControlsPinned] = useState(false);
@@ -465,6 +468,8 @@ function VizPage() {
   const arm = useCallback(async (kind: SourceKind, file?: File) => {
     const engine = engineRef.current;
     if (!engine) return;
+    if (kind === "file" && !file) { fileInputRef.current?.click(); return; }
+    const generation = ++armGeneration.current;
     setError(null);
     try {
       if (kind === "file" && !file) {
@@ -472,8 +477,12 @@ function VizPage() {
         return;
       }
       await engine.start(kind, file);
-      setSource(kind);
+      if (generation !== armGeneration.current) return;
+      setSource(engine.source?.kind ?? null);
+      if (kind === "file") setPlayerOpen(true);
     } catch (e) {
+      if (generation !== armGeneration.current || (e instanceof DOMException && e.name === "AbortError")) return;
+      setSource(engine.source?.kind ?? null);
       setError(
         e instanceof Error && e.message.includes("Share audio")
           ? e.message
@@ -977,12 +986,16 @@ function VizPage() {
     const onKey = (e: KeyboardEvent) => {
       if (embed || e.defaultPrevented || e.isComposing) return;
       if (labOpen) return; // The editor owns Escape and save/discard handling.
-      if (spotifyOpen || settingsOpen || helpOpen || browserOpen) {
+      if (spotifyOpen || settingsOpen || helpOpen || browserOpen || playerOpen) {
         if (e.key === "Escape") {
           e.preventDefault();
           setSpotifyOpen(false); setSettingsOpen(false); setHelpOpen(false); setBrowserOpen(false);
+          setPlayerOpen(false);
         }
         return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === "Space" && source === "file") {
+        e.preventDefault(); void engineRef.current?.toggleFilePlayback(); return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Escape" && deckFocused) {
@@ -1004,6 +1017,10 @@ function VizPage() {
       )
         return;
       switch (e.key) {
+        case "F5":
+          e.preventDefault();
+          if (!follow) setPlayerOpen(true);
+          break;
         case "b":
         case "B":
           setBrowserOpen(true);
@@ -1060,7 +1077,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, uiVisible, deckFocused]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1073,7 +1090,7 @@ function VizPage() {
       setUiVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       hideTimer.current = setTimeout(() => {
-        if ((source || follow) && !controlsPinned && !deckFocused && !labOpen && !spotifyOpen && !settingsOpen && !browserOpen && !helpOpen) setUiVisible(false);
+        if ((source || follow) && !controlsPinned && !deckFocused && !labOpen && !spotifyOpen && !settingsOpen && !browserOpen && !helpOpen && !playerOpen) setUiVisible(false);
       }, 3000);
     };
     window.addEventListener("pointermove", onMove);
@@ -1082,7 +1099,7 @@ function VizPage() {
       window.removeEventListener("pointermove", onMove);
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [source, follow, embed, controlsPinned, deckFocused, labOpen, spotifyOpen, settingsOpen, browserOpen, helpOpen]);
+  }, [source, follow, embed, controlsPinned, deckFocused, labOpen, spotifyOpen, settingsOpen, browserOpen, helpOpen, playerOpen]);
 
   const needsArming = ready && !follow && !source && !embed;
 
@@ -1238,7 +1255,7 @@ function VizPage() {
               {SOURCE_BUTTONS.map((s) => (
                 <button
                   key={s.kind}
-                  onClick={() => void arm(s.kind)}
+                  onClick={() => s.kind === "file" && source === "file" ? setPlayerOpen(true) : void arm(s.kind)}
                   className="group flex items-baseline justify-between gap-4 border border-white/15 px-5 py-4 text-left transition-colors hover:border-ultra-soft active:scale-[0.99]"
                 >
                   <span className="font-meter text-sm font-bold text-white/90 group-hover:text-white">
@@ -1322,7 +1339,7 @@ function VizPage() {
                     : s.kind === "mic"
                       ? "mic"
                       : s.kind === "file"
-                        ? "file"
+                        ? source === "file" ? "file (F5)" : "file"
                         : "demo"}
                 </button>
               ))}
@@ -1747,6 +1764,8 @@ function VizPage() {
       /> : null}
 
       {/* Spotify overlay. */}
+      {playerOpen && !embed && engineRef.current ? <AudioPlayer engine={engineRef.current}
+        onClose={() => setPlayerOpen(false)} onChoose={() => fileInputRef.current?.click()} /> : null}
       {spotifyOpen ? (
         <SpotifyPanel
           initialHint={spotifyHint}

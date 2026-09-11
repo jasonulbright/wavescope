@@ -24,7 +24,7 @@ export function PresetBrowser(props: Props) {
     (!onlyFavorites || props.favorites.includes(v.id))), [props.choices, props.favorites, query, onlyFavorites]);
   const choice = results.find((v) => v.id === selected);
   return <div ref={ref} role="dialog" aria-modal="true" aria-label="Visual browser" tabIndex={-1}
-    className="absolute inset-0 z-20 flex items-center justify-center bg-scope/70 p-4 font-meter"
+    className="absolute inset-0 z-20 flex items-center justify-center bg-scope/70 p-4 font-meter text-white"
     onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") props.onClose(); }}>
     <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col border border-white/20 bg-scope p-5">
       <div className="flex items-center justify-between"><h2>Browse visuals</h2><button className={btn} onClick={props.onClose}>close</button></div>

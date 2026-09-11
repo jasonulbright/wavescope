@@ -81,6 +81,10 @@
 }
 
 @layer components {
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
+    outline: 2px solid var(--color-ultra-soft);
+    outline-offset: 3px;
+  }
   /* Monospace device readouts (panel chrome, meter labels). */
   .readout {
     font-family: "JetBrains Mono", ui-monospace, monospace;

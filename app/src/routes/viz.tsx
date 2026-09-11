@@ -187,6 +187,9 @@ function VizPage() {
   const [source, setSource] = useState<SourceKind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uiVisible, setUiVisible] = useState(true);
+  const [controlsPinned, setControlsPinned] = useState(false);
+  const [deckFocused, setDeckFocused] = useState(false);
+  const deckRef = useRef<HTMLDivElement>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [fps, setFps] = useState(0);
   const [canvasSize, setCanvasSize] = useState("");
@@ -228,10 +231,12 @@ function VizPage() {
       if (raw) {
         const s = JSON.parse(raw) as {
           calm?: boolean;
+          controlsPinned?: boolean;
           shufflePalettes?: boolean;
           shuffleInclude?: string[] | null;
         };
         if (s.calm) setCalm(true);
+        if (s.controlsPinned) setControlsPinned(true);
         if (s.shufflePalettes) setShufflePalettes(true);
         if (Array.isArray(s.shuffleInclude)) setShuffleInclude(s.shuffleInclude);
       }
@@ -289,12 +294,12 @@ function VizPage() {
     try {
       localStorage.setItem(
         "wavescope-settings",
-        JSON.stringify({ calm, shufflePalettes, shuffleInclude }),
+        JSON.stringify({ calm, shufflePalettes, shuffleInclude, controlsPinned }),
       );
     } catch {
       // Storage blocked: settings stay session-only.
     }
-  }, [calm, shufflePalettes, shuffleInclude]);
+  }, [calm, shufflePalettes, shuffleInclude, controlsPinned]);
 
   // Calm mode never leaves a flashing mode on screen.
   useEffect(() => {
@@ -980,6 +985,19 @@ function VizPage() {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "Escape" && deckFocused) {
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.blur();
+        setDeckFocused(false);
+        rootRef.current?.focus();
+        return;
+      }
+      if (e.key === "Tab" && !uiVisible) {
+        e.preventDefault();
+        setUiVisible(true);
+        requestAnimationFrame(() => deckRef.current?.querySelector<HTMLElement>("button, select, input")?.focus());
+        return;
+      }
       if (
         e.target instanceof HTMLElement &&
         e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')
@@ -1042,7 +1060,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, uiVisible, deckFocused]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1055,7 +1073,7 @@ function VizPage() {
       setUiVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       hideTimer.current = setTimeout(() => {
-        if (source || follow) setUiVisible(false);
+        if ((source || follow) && !controlsPinned && !deckFocused && !labOpen && !spotifyOpen && !settingsOpen && !browserOpen && !helpOpen) setUiVisible(false);
       }, 3000);
     };
     window.addEventListener("pointermove", onMove);
@@ -1064,7 +1082,7 @@ function VizPage() {
       window.removeEventListener("pointermove", onMove);
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [source, follow, embed]);
+  }, [source, follow, embed, controlsPinned, deckFocused, labOpen, spotifyOpen, settingsOpen, browserOpen, helpOpen]);
 
   const needsArming = ready && !follow && !source && !embed;
 
@@ -1112,6 +1130,7 @@ function VizPage() {
   return (
     <div
       ref={rootRef}
+      tabIndex={-1}
       className={`relative h-dvh w-full overflow-hidden bg-scope ${
         uiVisible ? "" : "cursor-none"
       }`}
@@ -1199,6 +1218,7 @@ function VizPage() {
       {/* Home link (top-right). */}
       <Link
         to="/"
+        tabIndex={uiVisible && !embed ? 0 : -1}
         className={`absolute right-4 top-4 border border-white/20 bg-scope/70 px-3 py-1.5 font-meter text-xs text-white/70 transition-opacity duration-300 hover:text-white ${
           uiVisible ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
@@ -1272,11 +1292,18 @@ function VizPage() {
 
       {/* Control deck (bottom). */}
       <div
+        ref={deckRef}
+        inert={!uiVisible || embed}
+        onFocusCapture={() => { setDeckFocused(true); setUiVisible(true); }}
+        onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDeckFocused(false); }}
         className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
           uiVisible ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-white/10 bg-scope/85 px-4 py-3 backdrop-blur md:px-6">
+          <button onClick={() => setControlsPinned((v) => !v)} aria-pressed={controlsPinned}
+            className="border border-white/25 px-3 py-1.5 font-meter text-xs text-white/80"
+            title="Keep the control deck visible">{controlsPinned ? "unpin controls" : "pin controls"}</button>
           {!follow ? (
             <div className="flex items-center gap-1.5">
               <span className="readout mr-1 text-white/40">SRC</span>

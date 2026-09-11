@@ -43,6 +43,7 @@ interface MilkdropCanvasProps {
   blendSecRef?: MutableRefObject<number | null>;
   /** One-line message when a preset fails to compile or is refused. */
   onPresetError?: (message: string) => void;
+  onPresetLoaded?: (name: string) => void;
   onFps?: (fps: number) => void;
   onSize?: (s: string) => void;
   className?: string;
@@ -62,6 +63,7 @@ export function MilkdropCanvas({
   apiRef,
   blendSecRef,
   onPresetError,
+  onPresetLoaded,
   onFps,
   onSize,
   className,
@@ -74,6 +76,9 @@ export function MilkdropCanvas({
   extraRef.current = extraPresets;
   const onPresetErrorRef = useRef(onPresetError);
   onPresetErrorRef.current = onPresetError;
+  const loaded = useRef<{ name: string; preset: unknown } | null>(null);
+  const onLoadedRef = useRef(onPresetLoaded);
+  onLoadedRef.current = onPresetLoaded;
   // Preset loads compile eel to WASM asynchronously; the queue keeps them in
   // submission order so a slow compile cannot land after a newer pick.
   const loadQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -163,6 +168,7 @@ export function MilkdropCanvas({
         viz.connectAudio(node);
         connectedNode = node;
         vizRef.current = viz;
+        const name = presetRef.current;
         const preset =
           extraRef.current?.[presetRef.current] ??
           bundle.presets[presetRef.current] ??
@@ -170,6 +176,7 @@ export function MilkdropCanvas({
         try {
           // First frame waits for the WASM compile so it shows the preset.
           await applyPreset(preset, 0);
+          if (!disposed) { loaded.current = { name, preset }; onLoadedRef.current?.(name); }
         } catch (e) {
           if (!disposed) onPresetErrorRef.current?.(presetErrorMessage(e));
         }
@@ -214,6 +221,7 @@ export function MilkdropCanvas({
 
     return () => {
       disposed = true;
+      loaded.current = null;
       cancelAnimationFrame(raf);
       ro?.disconnect();
       // Unwire the audio edge and release the WebGL context, so switching
@@ -258,8 +266,11 @@ export function MilkdropCanvas({
     if (!vizRef.current || !bundle) return;
     const preset = extraRef.current?.[presetName] ?? bundle.presets[presetName];
     if (!preset) return;
+    if (loaded.current?.name === presetName && loaded.current.preset === preset) return;
     let stale = false;
-    applyPreset(preset, blend).catch((e) => {
+    applyPreset(preset, blend).then(() => {
+      if (!stale) { loaded.current = { name: presetName, preset }; onLoadedRef.current?.(presetName); }
+    }).catch((e) => {
       // A visualizer restart re-applies presetRef.current itself; only
       // surface real load failures.
       if (!stale && !(e instanceof Error && e.message === RESTARTED_MESSAGE))
@@ -270,7 +281,7 @@ export function MilkdropCanvas({
     };
     // blendSecRef is a stable ref consumed per switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presetName, applyPreset]);
+  }, [presetName, extraPresets, applyPreset]);
 
   return <canvas ref={canvasRef} className={className} />;
 }

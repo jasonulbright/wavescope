@@ -57,6 +57,12 @@ init/config/frame/pointer/stats shape.
 
 ## Phase B — MilkDrop from the real engine, compiled with Emscripten (DONE)
 
+September 2026: the maintained wrapper is now `scripts/projectm-wrapper.cpp`.
+Run `scripts/build-projectm.ps1` with the pinned projectM checkout and its WASM
+archives. ABI 2 reports preset rejection and accepts explicit 0–10 second
+transitions. The web adapter uses versioned query URLs for glue and WASM.
+The raw `.milk` lab, cut/morph controls and VJ transitions now use this API.
+
 **Built and shipped.** libprojectM is compiled to WASM and runs as a second
 MilkDrop engine (the `projectM` button in the console), executing raw `.milk`
 presets directly (per-pixel warp, ns-eel expression VM). Butterchurn stays as

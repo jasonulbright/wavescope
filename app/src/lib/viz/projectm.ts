@@ -35,7 +35,7 @@ export const BUNDLED_MILK: Array<{ name: string; url: string }> = [
 ];
 
 /** The Emscripten module surface we rely on (subset). */
-interface EmscriptenModule {
+export interface EmscriptenModule {
   cwrap: (
     name: string,
     ret: string | null,
@@ -51,7 +51,7 @@ type ProjectMFactory = (opts: {
   locateFile?: (path: string, prefix: string) => string;
 }) => Promise<EmscriptenModule>;
 
-const GLUE_URL = "/projectm/projectm.js";
+const GLUE_URL = "/projectm/projectm.js?abi=2";
 
 /** A live projectM instance bound to one canvas. */
 export class ProjectMEngine {
@@ -59,7 +59,8 @@ export class ProjectMEngine {
   private fns: {
     init: (w: number, h: number, mx: number, my: number) => number;
     resize: (w: number, h: number) => void;
-    loadData: (data: string, smooth: number) => void;
+    loadData: (data: string, seconds: number) => number;
+    lastError: () => string;
     addPcm: (ptr: number, count: number, channels: number) => void;
     render: () => void;
     destroy: () => void;
@@ -69,13 +70,14 @@ export class ProjectMEngine {
   private pcmCap = 0;
   private lastFeed = 0;
 
-  private constructor(m: EmscriptenModule) {
+  constructor(m: EmscriptenModule) {
     this.m = m;
     const w = m.cwrap.bind(m);
     this.fns = {
       init: w("sv_init", "number", ["number", "number", "number", "number"]) as never,
       resize: w("sv_resize", null, ["number", "number"]) as never,
-      loadData: w("sv_load_preset_data", null, ["string", "number"]) as never,
+      loadData: w("sv_load_preset_data", "number", ["string", "number"]) as never,
+      lastError: w("sv_last_error", "string", []) as never,
       addPcm: w("sv_add_pcm_float", null, ["number", "number", "number"]) as never,
       render: w("sv_render", null, []) as never,
       destroy: w("sv_destroy", null, []) as never,
@@ -94,11 +96,11 @@ export class ProjectMEngine {
     canvas.id = "canvas";
     const m = await load.factory({
       canvas,
-      locateFile: (path) => `/projectm/${path}`,
+      locateFile: (path) => `/projectm/${path}?abi=2`,
     });
     const engine = new ProjectMEngine(m);
     const rc = engine.fns.init(Math.max(1, width), Math.max(1, height), 48, 32);
-    if (rc !== 0) return null;
+    if (rc !== 0) { engine.destroy(); return null; }
     return engine;
   }
 
@@ -106,8 +108,11 @@ export class ProjectMEngine {
     this.fns.resize(Math.max(1, width), Math.max(1, height));
   }
 
-  loadPresetText(text: string, smooth: boolean) {
-    this.fns.loadData(text, smooth ? 1 : 0);
+  loadPresetText(text: string, blendSec = 0) {
+    if (!Number.isFinite(blendSec) || blendSec < 0 || blendSec > 10) throw new Error("Blend duration must be between 0 and 10 seconds.");
+    if (this.fns.loadData(text, blendSec) !== 0) {
+      throw new Error(this.fns.lastError() || "The projectM preset was rejected.");
+    }
   }
 
   /**

@@ -1,11 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import type { AudioGraphSource } from "../../lib/viz/types";
 import { ProjectMEngine } from "../../lib/viz/projectm";
+import { presetErrorMessage } from "../../lib/viz/milkdrop";
+
+export interface ProjectMApi { applyPreset(text: string, blendSec: number): Promise<void> }
 
 interface ProjectMCanvasProps {
   audio: AudioGraphSource;
   /** Raw .milk preset text (parent resolves bundled fetch / upload). */
   presetText: string;
+  presetName: string;
+  apiRef: MutableRefObject<ProjectMApi | null>;
+  blendSecRef: MutableRefObject<number | null>;
+  onPresetLoaded: (name: string, text: string) => void;
+  onPresetError: (message: string) => void;
   resolutionHeight: number;
   onFps?: (fps: number) => void;
   onSize?: (s: string) => void;
@@ -24,6 +32,7 @@ interface ProjectMCanvasProps {
 export function ProjectMCanvas({
   audio,
   presetText,
+  presetName, apiRef, blendSecRef, onPresetLoaded, onPresetError,
   resolutionHeight,
   onFps,
   onSize,
@@ -34,6 +43,11 @@ export function ProjectMCanvas({
   const engineRef = useRef<ProjectMEngine | null>(null);
   const presetRef = useRef(presetText);
   presetRef.current = presetText;
+  const nameRef = useRef(presetName);
+  nameRef.current = presetName;
+  const callbacks = useRef({ onPresetLoaded, onPresetError, onError });
+  callbacks.current = { onPresetLoaded, onPresetError, onError };
+  const loadedText = useRef("");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,7 +99,18 @@ export function ProjectMCanvas({
         }
         engine = eng;
         engineRef.current = eng;
-        if (presetRef.current) eng.loadPresetText(presetRef.current, false);
+        apiRef.current = { applyPreset: async (text, seconds) => {
+          if (disposed || engineRef.current !== eng) throw new Error("The engine restarted. Try applying again.");
+          eng.loadPresetText(text, seconds);
+          loadedText.current = text;
+        } };
+        try {
+          if (presetRef.current) {
+            eng.loadPresetText(presetRef.current, 0);
+            loadedText.current = presetRef.current;
+            callbacks.current.onPresetLoaded(nameRef.current, presetRef.current);
+          }
+        } catch (e) { callbacks.current.onPresetError(presetErrorMessage(e)); }
         onSize?.(`${canvas.width}x${canvas.height}`);
 
         ro = new ResizeObserver(() => {
@@ -129,17 +154,24 @@ export function ProjectMCanvas({
       ro?.disconnect();
       engine?.destroy();
       engineRef.current = null;
+      apiRef.current = null;
+      loadedText.current = "";
     };
     // audio/onError/onFps/onSize are stable per mount; resolution changes remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolutionHeight]);
+  }, [audio, resolutionHeight]);
 
   // Preset switches crossfade in place without a WebGL rebuild.
   useEffect(() => {
-    if (engineRef.current && presetText) {
-      engineRef.current.loadPresetText(presetText, true);
-    }
-  }, [presetText]);
+    const blend = blendSecRef.current ?? 0;
+    blendSecRef.current = null;
+    if (!engineRef.current || !presetText) return;
+    try {
+      if (loadedText.current !== presetText) engineRef.current.loadPresetText(presetText, blend);
+      loadedText.current = presetText;
+      callbacks.current.onPresetLoaded(presetName, presetText);
+    } catch (e) { callbacks.current.onPresetError(presetErrorMessage(e)); }
+  }, [presetText, presetName]);
 
   return <canvas ref={canvasRef} className={className} />;
 }

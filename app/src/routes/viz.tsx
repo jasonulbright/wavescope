@@ -25,7 +25,7 @@ import { PresetLab } from "../components/ws/PresetLab";
 import { saveNewPreset, favoriteKey, favoritePool, loadPresetPreferences } from "../lib/viz/preset-library";
 import { PresetBrowser } from "../components/ws/PresetBrowser";
 import { AudioPlayer } from "../components/ws/AudioPlayer";
-import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
+import { ProjectMCanvas, type ProjectMApi } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
   loadCustomMilkPresets,
@@ -130,6 +130,7 @@ function VizPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [milk, setMilk] = useState(false);
   const [milkPreset, setMilkPreset] = useState("");
+  const [milkPlaying, setMilkPlaying] = useState("");
   const [milkNames, setMilkNames] = useState<string[]>([]);
   const [milkLoading, setMilkLoading] = useState(false);
   const [customMilk, setCustomMilk] = useState<Record<string, unknown>>({});
@@ -154,9 +155,7 @@ function VizPage() {
   }, [favorites, shuffleFavorites, libraryLoaded]);
   // The lab belongs to the MilkDrop engine: leaving it closes the panel, so
   // hopping back (even via DJ shuffle) cannot silently reopen it.
-  useEffect(() => {
-    if (!milk) setLabOpen(false);
-  }, [milk]);
+
   // One-shot blend override consumed by the canvas on the next preset switch.
   const milkBlendRef = useRef<number | null>(null);
   // Morph deck: a target preset and the blend length to reach it. The
@@ -168,7 +167,13 @@ function VizPage() {
   const [pm, setPm] = useState(false);
   const [pmAvailable, setPmAvailable] = useState<boolean | null>(null);
   const [pmPreset, setPmPreset] = useState(BUNDLED_MILK[0]?.name ?? "");
-  const [pmText, setPmText] = useState("");
+  const [pmResolved, setPmResolved] = useState({ name: "", text: "" });
+  const pmText = pmResolved.text;
+  const [pmPlaying, setPmPlaying] = useState({ name: "", text: "" });
+  const pmApiRef = useRef<ProjectMApi | null>(null);
+  const pmBlendRef = useRef<number | null>(null);
+  const pmLabBase = useMemo(() => ({ raw: pmPlaying.text }), [pmPlaying.text]);
+  useEffect(() => { if (!milk && !pm) setLabOpen(false); setMorphTarget(""); }, [milk, pm]);
   const [pmCustom, setPmCustom] = useState<Record<string, string>>({});
   const pmFileRef = useRef<HTMLInputElement>(null);
   // WebGPU engine (GPU-native per-pixel shader modes).
@@ -281,10 +286,12 @@ function VizPage() {
     const bundled = BUNDLED_MILK.find((b) => b.name === pmPreset);
     if (bundled) {
       void fetchMilkText(bundled.url).then((t) => {
-        if (!cancelled) setPmText(t);
+        if (!cancelled) setPmResolved({ name: pmPreset, text: t });
+      }).catch((e) => {
+        if (!cancelled) { pmBlendRef.current = null; setError(e instanceof Error ? e.message : "The preset could not be read."); setPmPreset(pmPlaying.name || BUNDLED_MILK[0].name); }
       });
     } else if (pmCustom[pmPreset] !== undefined) {
-      setPmText(pmCustom[pmPreset]);
+      setPmResolved({ name: pmPreset, text: pmCustom[pmPreset] });
     }
     return () => {
       cancelled = true;
@@ -502,7 +509,7 @@ function VizPage() {
   );
 
   const activeEngine = gpu ? "gpu" : pm ? "pm" : milk ? "milk" : "builtin";
-  const currentVisual = gpu ? gpuMode : pm ? pmPreset : milk ? milkPreset : modeId;
+  const currentVisual = gpu ? gpuMode : pm ? pmPlaying.name || pmPreset : milk ? milkPlaying || milkPreset : modeId;
   const visualChoices = useMemo(() => gpu ? GPU_MODES.map((v) => ({ id: v.id, name: v.name }))
     : pm ? pmNames.map((n) => ({ id: n, name: n }))
     : milk ? milkAll.map((n) => ({ id: n, name: n }))
@@ -701,20 +708,15 @@ function VizPage() {
    * shuffle (the default). The blend override is only armed when a switch
    * actually happens, so it cannot leak onto a later unrelated preset
    * change; a named target that no longer exists is a no-op. */
-  const morphTo = useCallback(() => {
-    if (morphTarget === "") {
-      setMilkPreset((cur) => {
-        const others = milkAll.filter((n) => n !== cur);
-        if (!others.length) return cur;
-        milkBlendRef.current = morphSec;
-        return others[Math.floor(Math.random() * others.length)];
-      });
-      return;
-    }
-    if (morphTarget === milkPreset || !milkAll.includes(morphTarget)) return;
-    milkBlendRef.current = morphSec;
-    setMilkPreset(morphTarget);
-  }, [morphTarget, morphSec, milkPreset, milkAll]);
+  const morphTo = useCallback((seconds = morphSec) => {
+    const names = pm ? pmNames : milkAll;
+    const current = pm ? pmPlaying.name : milkPreset;
+    const pool = (pm ? autoPm : autoMilk).filter((name) => name !== current);
+    const target = morphTarget || pool[Math.floor(Math.random() * pool.length)];
+    if (!target || target === current || !names.includes(target)) return;
+    if (pm) { pmBlendRef.current = seconds; setPmPreset(target); }
+    else { milkBlendRef.current = seconds; setMilkPreset(target); }
+  }, [pm, pmNames, milkAll, pmPlaying.name, milkPreset, autoPm, autoMilk, morphTarget, morphSec]);
 
   const deleteMilkPreset = useCallback(() => {
     setCustomMilk((cur) => {
@@ -798,9 +800,9 @@ function VizPage() {
         if (!autoPm.length) return;
         setPmPreset((cur) => {
           const others = autoPm.filter((n) => n !== cur);
-          return others.length
-            ? others[Math.floor(Math.random() * others.length)]
-            : cur;
+          if (!others.length) return cur;
+          pmBlendRef.current = morphSec;
+          return others[Math.floor(Math.random() * others.length)];
         });
         return;
       }
@@ -874,9 +876,9 @@ function VizPage() {
         if (!autoPm.length) return;
         setPmPreset((cur) => {
           const others = autoPm.filter((n) => n !== cur);
-          return others.length
-            ? others[Math.floor(Math.random() * others.length)]
-            : cur;
+          if (!others.length) return cur;
+          pmBlendRef.current = blendSec;
+          return others[Math.floor(Math.random() * others.length)];
         });
         return;
       }
@@ -1063,7 +1065,7 @@ function VizPage() {
           break;
         case "l":
         case "L":
-          if (!embed && milk) setLabOpen((v) => !v);
+          if (!embed && (milk || (pm && pmPlaying.text))) setLabOpen((v) => !v);
           break;
         case "?":
           setHelpOpen((v) => !v);
@@ -1077,7 +1079,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused, pm, pmPlaying.text]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1120,9 +1122,9 @@ function VizPage() {
         gpu
           ? `GPU ${gpuModeById(gpuMode).name.toUpperCase()}`
           : pm
-            ? `PROJECTM ${pmPreset.slice(0, 32).toUpperCase()}`
+            ? `PROJECTM ${(pmPlaying.name || "LOADING").slice(0, 32).toUpperCase()}`
             : milk
-              ? `MILKDROP ${milkPreset.slice(0, 34).toUpperCase()}`
+              ? `MILKDROP ${(milkPlaying || "LOADING").slice(0, 34).toUpperCase()}`
               : `MODE ${mode.name.toUpperCase()}`,
         canvasSize ? `RES ${canvasSize}` : null,
         shuffleSec
@@ -1135,7 +1137,7 @@ function VizPage() {
           : null,
         `FPS ${fps}`,
       ].filter(Boolean),
-    [follow, receiverLive, linked, pcmLive, source, mode.name, canvasSize, shuffleSec, shufflePalettes, calm, recording, fps, milk, milkPreset, pm, pmPreset, gpu, gpuMode, nowPlaying],
+    [follow, receiverLive, linked, pcmLive, source, mode.name, canvasSize, shuffleSec, shufflePalettes, calm, recording, fps, milk, milkPreset, milkPlaying, pm, pmPreset, pmPlaying.name, gpu, gpuMode, nowPlaying],
   );
 
   const milkAudio = follow ? linkRef.current : engineRef.current;
@@ -1170,6 +1172,11 @@ function VizPage() {
         <ProjectMCanvas
           audio={milkAudio}
           presetText={pmText}
+          presetName={pmResolved.name}
+          apiRef={pmApiRef}
+          blendSecRef={pmBlendRef}
+          onPresetLoaded={(name, text) => setPmPlaying((cur) => cur.name === name && cur.text === text ? cur : { name, text })}
+          onPresetError={(message) => { setError(message); setPmPreset(pmPlaying.name || BUNDLED_MILK[0].name); }}
           resolutionHeight={resolution.height}
           onFps={setFps}
           onSize={setCanvasSize}
@@ -1187,7 +1194,8 @@ function VizPage() {
           resolutionHeight={resolution.height}
           apiRef={milkApiRef}
           blendSecRef={milkBlendRef}
-          onPresetError={setError}
+          onPresetLoaded={setMilkPlaying}
+          onPresetError={(message) => { setError(message); if (milkPlaying) setMilkPreset(milkPlaying); }}
           onFps={setFps}
           onSize={setCanvasSize}
           className="absolute inset-0 h-full w-full"
@@ -1379,7 +1387,7 @@ function VizPage() {
               </select>
             ) : pm ? (
               <select
-                value={pmPreset}
+                value={pmPlaying.name || pmPreset}
                 onChange={(e) => setPmPreset(e.target.value)}
                 className="max-w-48 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
                 aria-label="projectM preset"
@@ -1405,7 +1413,7 @@ function VizPage() {
               </select>
             ) : milk ? (
               <select
-                value={milkPreset}
+                value={milkPlaying || milkPreset}
                 onChange={(e) => setMilkPreset(e.target.value)}
                 className="max-w-48 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
                 aria-label="MilkDrop preset"
@@ -1574,6 +1582,10 @@ function VizPage() {
                   remove
                 </button>
               ) : null}
+            </>
+          ) : null}
+          {milk || pm ? (
+            <>
               {!embed ? (
                 <button
                   onClick={() => setLabOpen((v) => !v)}
@@ -1588,6 +1600,7 @@ function VizPage() {
                 </button>
               ) : null}
               <div className="flex items-center gap-1.5">
+                <button onClick={() => morphTo(0)} className="border border-white/25 px-3 py-1.5 font-meter text-xs text-white/80">cut to target</button>
                 <span className="readout mr-1 text-white/40">MORPH</span>
                 <select
                   value={morphTarget}
@@ -1596,7 +1609,7 @@ function VizPage() {
                   className="max-w-48 border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs text-white/80"
                 >
                   <option value="">shuffle</option>
-                  {milkAll.map((n) => (
+                  {(pm ? pmNames : milkAll).map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -1606,7 +1619,7 @@ function VizPage() {
                   type="range"
                   min={0.5}
                   max={10}
-                  step={0.5}
+                  step={0.1}
                   value={morphSec}
                   onChange={(e) => setMorphSec(Number(e.target.value))}
                   aria-label="Morph blend length in seconds"
@@ -1614,7 +1627,7 @@ function VizPage() {
                 />
                 <span className="w-8 font-meter text-xs text-white/40">{morphSec}s</span>
                 <button
-                  onClick={morphTo}
+                  onClick={() => morphTo()}
                   title="Blend from the playing preset to the target over the morph length"
                   aria-label="Blend from the playing preset to the target over the morph length"
                   className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
@@ -1732,16 +1745,25 @@ function VizPage() {
       </div>
 
       {/* Preset lab: live eel editing for the active MilkDrop preset. */}
-      {labOpen && milk && !embed ? (
+      {labOpen && (milk || pm) && !embed ? (
         <PresetLab
-          presetName={milkPreset}
-          base={customMilk[milkPreset] ?? milkBundleRef.current?.presets[milkPreset] ?? null}
+          format={pm ? "milk" : "eel"}
+          presetName={pm ? pmPlaying.name : milkPreset}
+          base={pm ? pmLabBase : customMilk[milkPreset] ?? milkBundleRef.current?.presets[milkPreset] ?? null}
           onApply={(edited) =>
+            pm ? (pmApiRef.current ? pmApiRef.current.applyPreset(String(edited.raw), 0) : Promise.reject(new Error("The engine is not ready."))) :
             milkApiRef.current
               ? milkApiRef.current.applyPreset(edited, 0)
               : Promise.reject(new Error("The engine is not running; arm a source first."))
           }
           onSaveAs={async (name, preset) => {
+            if (pm) {
+              const next = saveNewPreset(name, String(preset.raw), pmCustom, BUNDLED_MILK.map((p) => p.name), (map) => {
+                try { localStorage.setItem("wavescope-pm-milk", JSON.stringify(map)); return true; } catch { return false; }
+              });
+              setPmCustom(next); setPmPreset(name);
+              return;
+            }
             const next = saveNewPreset(name, preset, customMilk, milkNames, saveCustomMilkPresets);
             setCustomMilk(next);
             setMilkPreset(name);
@@ -1759,7 +1781,7 @@ function VizPage() {
           return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
         })}
         onPlay={(id) => { if (gpu) setGpuMode(id); else if (pm) setPmPreset(id); else if (milk) setMilkPreset(id); else setModeId(id); }}
-        onCue={milk ? (id) => { setMorphTarget(id); setBrowserOpen(false); } : undefined}
+        onCue={milk || pm ? (id) => { setMorphTarget(id); setBrowserOpen(false); } : undefined}
         onClose={() => setBrowserOpen(false)}
       /> : null}
 

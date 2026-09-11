@@ -48,3 +48,10 @@ The engine/output changes also receive a dedicated review and correction pass.
   Loaded an eight-second generated silent WAV in the real browser; verified
   pause, seek while paused, disabling loop, EOF Replay and continued playback
   after closing. Production build passes with 40 tests.
+- Engine parity: rebuilt ABI 2 from the tracked wrapper against projectM
+  `149bfc43963e54e397ccdb42f27019d22b659098`. The wrapper owns failure callbacks,
+  context activation and explicit blend duration. Queried asset URLs prevent
+  an old service-worker entry from pairing ABI 1 with the new adapter.
+  In the real WASM engine, `per_frame_1=zoom = ( ;` reports a line/column syntax
+  error while WaveScope Tunnel continues rendering. Verified discard and a
+  named ten-second morph to Bloom. The build passes with 41 tests.

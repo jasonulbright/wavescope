@@ -11,6 +11,7 @@ import { useFocusTrap } from "../../hooks/use-focus-trap";
  */
 
 interface PresetLabProps {
+  format?: "eel" | "milk";
   /** Name of the preset the editor is seeded from. */
   presetName: string;
   /** The active preset object (bundled or custom); null while loading. */
@@ -45,7 +46,9 @@ function eelField(base: unknown, key: string): string {
 function buildEdited(
   base: unknown,
   eqs: Record<string, string>,
+  format: "eel" | "milk" = "eel",
 ): Record<string, unknown> {
+  if (format === "milk") return { raw: eqs.raw ?? "" };
   const copy =
     base && typeof base === "object"
       ? (structuredClone(base) as Record<string, unknown>)
@@ -60,6 +63,7 @@ export function PresetLab({
   onApply,
   onSaveAs,
   onClose,
+  format = "eel",
 }: PresetLabProps) {
   const [eqs, setEqs] = useState<Record<string, string>>({});
   const [name, setName] = useState("");
@@ -69,6 +73,7 @@ export function PresetLab({
   const [confirmClose, setConfirmClose] = useState(false);
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   const dirty = JSON.stringify(eqs) !== savedEqs;
+  const fields = format === "milk" ? [{ key: "raw", label: "MILK SOURCE" }] : EEL_FIELDS;
   const requestClose = () => { if (busyRef.current) return; if (dirty) setConfirmClose(true); else onClose(); };
   useEffect(() => {
     if (!dirty) return;
@@ -82,19 +87,19 @@ export function PresetLab({
   // refreshes the textareas instead of leaving stale eel to overwrite it.
   useEffect(() => {
     const next: Record<string, string> = {};
-    for (const f of EEL_FIELDS) next[f.key] = eelField(base, f.key);
+    for (const f of format === "milk" ? [{ key: "raw" }] : EEL_FIELDS) next[f.key] = eelField(base, f.key);
     setEqs(next);
     setSavedEqs(JSON.stringify(next));
     setName(`${presetName} (edit)`);
     setStatus({ kind: "idle" });
-  }, [presetName, base]);
+  }, [presetName, base, format]);
 
   const save = async (closeAfter = false) => {
     if (busyRef.current) return;
     busyRef.current = true;
     setStatus({ kind: "busy" });
     try {
-      await onSaveAs(name.trim(), buildEdited(base, eqs));
+      await onSaveAs(name.trim(), buildEdited(base, eqs, format));
       setSavedEqs(JSON.stringify(eqs));
       setStatus({ kind: "idle" });
       setConfirmClose(false);
@@ -108,7 +113,7 @@ export function PresetLab({
     busyRef.current = true;
     setStatus({ kind: "busy" });
     const t0 = performance.now();
-    onApply(buildEdited(base, eqs))
+    onApply(buildEdited(base, eqs, format))
       .then(() => setStatus({ kind: "ok", ms: Math.round(performance.now() - t0) }))
       .catch((e) => setStatus({ kind: "err", message: presetErrorMessage(e) }))
       .finally(() => {
@@ -117,13 +122,13 @@ export function PresetLab({
   };
 
   const exportJson = () => {
-    const blob = new Blob([JSON.stringify(buildEdited(base, eqs), null, 2)], {
-      type: "application/json",
+    const blob = new Blob([format === "milk" ? eqs.raw ?? "" : JSON.stringify(buildEdited(base, eqs), null, 2)], {
+      type: format === "milk" ? "text/plain" : "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${name || presetName}.json`;
+    a.download = `${name || presetName}.${format === "milk" ? "milk" : "json"}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -132,7 +137,7 @@ export function PresetLab({
     <div className="absolute inset-0 z-20 bg-black/30 text-white">
     <div
       ref={trapRef}
-      className="absolute bottom-24 right-4 top-16 z-10 flex w-[380px] max-w-[85vw] flex-col border border-white/15 bg-scope/95 p-4"
+      className={`absolute bottom-8 right-4 top-8 z-10 flex ${format === "milk" ? "w-[680px]" : "w-[420px]"} max-w-[90vw] flex-col border border-white/15 bg-scope/95 p-4`}
       role="dialog"
       aria-modal="true"
       aria-label="Preset lab"
@@ -161,7 +166,7 @@ export function PresetLab({
       </p>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
-        {EEL_FIELDS.map((f) => (
+        {fields.map((f) => (
           <label key={f.key} className="flex flex-col gap-1">
             <span className="readout text-white/40">{f.label}</span>
             <textarea
@@ -170,7 +175,7 @@ export function PresetLab({
                 setEqs((cur) => ({ ...cur, [f.key]: e.target.value }))
               }
               spellCheck={false}
-              rows={f.key === "init_eqs_eel" ? 3 : 7}
+              rows={f.key === "raw" ? 24 : f.key === "init_eqs_eel" ? 3 : 7}
               className="resize-y border border-white/15 bg-scope px-2 py-1.5 font-meter text-xs leading-relaxed text-white/85 placeholder:text-white/25"
               placeholder="// eel"
             />

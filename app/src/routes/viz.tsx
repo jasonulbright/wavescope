@@ -22,7 +22,8 @@ import { WorkerCanvas, workerCanvasSupported } from "../components/ws/WorkerCanv
 import type { PaletteRef } from "../lib/viz/render-worker";
 import { MilkdropCanvas, type MilkdropApi } from "../components/ws/MilkdropCanvas";
 import { PresetLab } from "../components/ws/PresetLab";
-import { saveNewPreset } from "../lib/viz/preset-library";
+import { saveNewPreset, favoriteKey, favoritePool, loadPresetPreferences } from "../lib/viz/preset-library";
+import { PresetBrowser } from "../components/ws/PresetBrowser";
 import { ProjectMCanvas } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
@@ -137,6 +138,19 @@ function VizPage() {
   // Loaded engine bundle: the lab reads preset objects from it by name.
   const milkBundleRef = useRef<MilkdropBundle | null>(null);
   const [labOpen, setLabOpen] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [shuffleFavorites, setShuffleFavorites] = useState(false);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  useEffect(() => {
+    const saved = loadPresetPreferences();
+    setFavorites(saved.favorites); setShuffleFavorites(saved.shuffleFavorites); setLibraryLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!libraryLoaded) return;
+    try { localStorage.setItem("wavescope-library", JSON.stringify({ favorites, shuffleFavorites })); }
+    catch { setError("Library preferences are session-only: browser storage is full or blocked."); }
+  }, [favorites, shuffleFavorites, libraryLoaded]);
   // The lab belongs to the MilkDrop engine: leaving it closes the panel, so
   // hopping back (even via DJ shuffle) cannot silently reopen it.
   useEffect(() => {
@@ -473,6 +487,17 @@ function VizPage() {
     [customMilk, milkNames],
   );
 
+  const activeEngine = gpu ? "gpu" : pm ? "pm" : milk ? "milk" : "builtin";
+  const currentVisual = gpu ? gpuMode : pm ? pmPreset : milk ? milkPreset : modeId;
+  const visualChoices = useMemo(() => gpu ? GPU_MODES.map((v) => ({ id: v.id, name: v.name }))
+    : pm ? pmNames.map((n) => ({ id: n, name: n }))
+    : milk ? milkAll.map((n) => ({ id: n, name: n }))
+    : availableModes.map((m) => ({ id: m.id, name: m.name })), [gpu, pm, milk, pmNames, milkAll, availableModes]);
+  const autoModes = useMemo(() => favoritePool(availableModes, "builtin", favorites, shuffleFavorites, (v) => v.id), [availableModes, favorites, shuffleFavorites]);
+  const autoGpu = useMemo(() => favoritePool(GPU_MODES, "gpu", favorites, shuffleFavorites, (v) => v.id), [favorites, shuffleFavorites]);
+  const autoPm = useMemo(() => favoritePool(pmNames, "pm", favorites, shuffleFavorites, (v) => v), [pmNames, favorites, shuffleFavorites]);
+  const autoMilk = useMemo(() => favoritePool(milkAll, "milk", favorites, shuffleFavorites, (v) => v), [milkAll, favorites, shuffleFavorites]);
+
   const cycleMode = useCallback(
     (dir: 1 | -1) => {
       if (gpu) {
@@ -701,39 +726,40 @@ function VizPage() {
         setPm(false);
         setGpu(false);
         setModeId((cur) => {
-          const others = availableModes.filter((m) => m.id !== cur);
+          const others = autoModes.filter((m) => m.id !== cur);
           return others.length
             ? others[Math.floor(Math.random() * others.length)].id
             : cur;
         });
       },
     ];
-    if (gpuAvailable) {
+    if (!autoModes.length) hops.length = 0;
+    if (gpuAvailable && autoGpu.length) {
       hops.push(() => {
         setMilk(false);
         setPm(false);
         setGpu(true);
-        setGpuMode(GPU_MODES[Math.floor(Math.random() * GPU_MODES.length)].id);
+        setGpuMode(autoGpu[Math.floor(Math.random() * autoGpu.length)].id);
       });
     }
-    if (pmAvailable && pmNames.length) {
+    if (pmAvailable && autoPm.length) {
       hops.push(() => {
         setMilk(false);
         setGpu(false);
-        setPmPreset(pmNames[Math.floor(Math.random() * pmNames.length)]);
+        setPmPreset(autoPm[Math.floor(Math.random() * autoPm.length)]);
         setPm(true);
       });
     }
-    if (milkNames.length && milkAll.length) {
+    if (milkNames.length && autoMilk.length) {
       hops.push(() => {
         setPm(false);
         setGpu(false);
-        setMilkPreset(milkAll[Math.floor(Math.random() * milkAll.length)]);
+        setMilkPreset(autoMilk[Math.floor(Math.random() * autoMilk.length)]);
         setMilk(true);
       });
     }
-    hops[Math.floor(Math.random() * hops.length)]();
-  }, [availableModes, gpuAvailable, pmAvailable, pmNames, milkNames, milkAll]);
+    hops[Math.floor(Math.random() * hops.length)]?.();
+  }, [autoModes, autoGpu, gpuAvailable, pmAvailable, autoPm, milkNames, autoMilk]);
 
   // Shuffle: hop to a random OTHER mode every shuffleSec seconds, and
   // optionally to a random palette from the user's include list. Negative
@@ -747,27 +773,29 @@ function VizPage() {
       }
       if (gpu) {
         setGpuMode((cur) => {
-          const others = GPU_MODES.filter((m) => m.id !== cur);
+          const others = autoGpu.filter((m) => m.id !== cur);
           return others.length
             ? others[Math.floor(Math.random() * others.length)].id
             : cur;
         });
         return;
       }
-      if (pm && pmNames.length) {
+      if (pm) {
+        if (!autoPm.length) return;
         setPmPreset((cur) => {
-          const others = pmNames.filter((n) => n !== cur);
+          const others = autoPm.filter((n) => n !== cur);
           return others.length
             ? others[Math.floor(Math.random() * others.length)]
             : cur;
         });
         return;
       }
-      if (milk && milkAll.length) {
+      if (milk) {
+        if (!autoMilk.length) return;
         // MilkDrop engine: shuffle hops presets; palettes are the preset's
         // own. Transitions use the morph deck's blend length.
         setMilkPreset((cur) => {
-          const others = milkAll.filter((n) => n !== cur);
+          const others = autoMilk.filter((n) => n !== cur);
           if (!others.length) return cur;
           milkBlendRef.current = morphSec;
           return others[Math.floor(Math.random() * others.length)];
@@ -775,7 +803,7 @@ function VizPage() {
         return;
       }
       setModeId((cur) => {
-        const others = availableModes.filter((m) => m.id !== cur);
+        const others = autoModes.filter((m) => m.id !== cur);
         return others.length
           ? others[Math.floor(Math.random() * others.length)].id
           : cur;
@@ -792,7 +820,7 @@ function VizPage() {
       }
     }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
-  }, [shuffleSec, availableModes, shufflePalettes, shuffleInclude, allPalettes, milk, milkAll, morphSec, pm, pmNames, gpu, djHop, labOpen]);
+  }, [shuffleSec, autoModes, shufflePalettes, shuffleInclude, allPalettes, milk, autoMilk, morphSec, pm, autoPm, gpu, autoGpu, djHop, labOpen]);
 
   // Auto-VJ: audio-driven switching instead of a timer. Bass energy feeds a
   // fast and a slow envelope; the fast one spiking over the slow one is a
@@ -808,9 +836,10 @@ function VizPage() {
     const LULL_MS = 45000; // no drop for this long → gentle morph
     const hop = (blendSec: number) => {
       lastSwitch = performance.now();
-      if (milk && milkAll.length) {
+      if (milk) {
+        if (!autoMilk.length) return;
         setMilkPreset((cur) => {
-          const others = milkAll.filter((n) => n !== cur);
+          const others = autoMilk.filter((n) => n !== cur);
           if (!others.length) return cur;
           // Arm the one-shot blend only when a switch really happens.
           milkBlendRef.current = blendSec;
@@ -820,16 +849,17 @@ function VizPage() {
       }
       if (gpu) {
         setGpuMode((cur) => {
-          const others = GPU_MODES.filter((m) => m.id !== cur);
+          const others = autoGpu.filter((m) => m.id !== cur);
           return others.length
             ? others[Math.floor(Math.random() * others.length)].id
             : cur;
         });
         return;
       }
-      if (pm && pmNames.length) {
+      if (pm) {
+        if (!autoPm.length) return;
         setPmPreset((cur) => {
-          const others = pmNames.filter((n) => n !== cur);
+          const others = autoPm.filter((n) => n !== cur);
           return others.length
             ? others[Math.floor(Math.random() * others.length)]
             : cur;
@@ -837,7 +867,7 @@ function VizPage() {
         return;
       }
       setModeId((cur) => {
-        const others = availableModes.filter((m) => m.id !== cur);
+        const others = autoModes.filter((m) => m.id !== cur);
         return others.length
           ? others[Math.floor(Math.random() * others.length)].id
           : cur;
@@ -868,7 +898,7 @@ function VizPage() {
       if (held > LULL_MS) hop(5); // lull: slow morph
     }, 150);
     return () => clearInterval(iv);
-  }, [shuffleSec, milk, milkAll, pm, pmNames, gpu, availableModes, getFrame, labOpen]);
+  }, [shuffleSec, milk, autoMilk, pm, autoPm, gpu, autoGpu, autoModes, getFrame, labOpen]);
 
   const cycleShuffle = useCallback(() => {
     setShuffleSec((cur) => {
@@ -942,10 +972,10 @@ function VizPage() {
     const onKey = (e: KeyboardEvent) => {
       if (embed || e.defaultPrevented || e.isComposing) return;
       if (labOpen) return; // The editor owns Escape and save/discard handling.
-      if (spotifyOpen || settingsOpen || helpOpen) {
+      if (spotifyOpen || settingsOpen || helpOpen || browserOpen) {
         if (e.key === "Escape") {
           e.preventDefault();
-          setSpotifyOpen(false); setSettingsOpen(false); setHelpOpen(false);
+          setSpotifyOpen(false); setSettingsOpen(false); setHelpOpen(false); setBrowserOpen(false);
         }
         return;
       }
@@ -956,6 +986,10 @@ function VizPage() {
       )
         return;
       switch (e.key) {
+        case "b":
+        case "B":
+          setBrowserOpen(true);
+          break;
         case " ":
         case "ArrowRight":
           e.preventDefault();
@@ -1008,7 +1042,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1374,6 +1408,10 @@ function VizPage() {
             </button>
           </div>
 
+          <button onClick={() => setBrowserOpen(true)}
+            className="border border-white/25 px-3 py-1.5 font-meter text-xs text-white/80"
+            title="Search visuals and manage favorites">browse (B)</button>
+
           {!follow || linked ? (
             <button
               onClick={selectBuiltin}
@@ -1667,6 +1705,19 @@ function VizPage() {
           onClose={() => setLabOpen(false)}
         />
       ) : null}
+
+      {browserOpen && !embed ? <PresetBrowser
+        choices={visualChoices} current={currentVisual}
+        favorites={visualChoices.filter((v) => favorites.includes(favoriteKey(activeEngine, v.id))).map((v) => v.id)}
+        shuffleFavorites={shuffleFavorites} onShuffleFavorites={setShuffleFavorites}
+        onFavorite={(id) => setFavorites((cur) => {
+          const key = favoriteKey(activeEngine, id);
+          return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+        })}
+        onPlay={(id) => { if (gpu) setGpuMode(id); else if (pm) setPmPreset(id); else if (milk) setMilkPreset(id); else setModeId(id); }}
+        onCue={milk ? (id) => { setMorphTarget(id); setBrowserOpen(false); } : undefined}
+        onClose={() => setBrowserOpen(false)}
+      /> : null}
 
       {/* Spotify overlay. */}
       {spotifyOpen ? (

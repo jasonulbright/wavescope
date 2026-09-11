@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { saveNewPreset } from "../preset-library";
+import { saveNewPreset, favoriteKey, favoritePool } from "../preset-library";
 
 test("Save As preserves existing and bundled presets, including case variants", () => {
   const original = { saved: { source: "original" } };
@@ -18,4 +18,10 @@ test("successful Save As returns a new library without changing the original", (
   const next = saveNewPreset(" new ", "edit", original, [], () => true);
   expect(next).toEqual({ saved: "original", new: "edit" });
   expect(Object.keys(original)).toEqual(["saved"]);
+});
+test("favorites are scoped by engine and empty filtered pools remain empty", () => {
+  const favorites = [favoriteKey("milk", "same name")];
+  expect(favoritePool(["same name", "other"], "milk", favorites, true, (v) => v)).toEqual(["same name"]);
+  expect(favoritePool(["same name"], "pm", favorites, true, (v) => v)).toEqual([]);
+  expect(favoritePool(["one", "two"], "pm", [], false, (v) => v)).toEqual(["one", "two"]);
 });

@@ -13,3 +13,16 @@ export function saveNewPreset<T>(
   if (!persist(next)) throw new Error("The preset could not be saved. Browser storage may be full or blocked. Export a copy or free space and retry.");
   return next;
 }
+
+export const favoriteKey = (engine: string, id: string) => JSON.stringify([engine, id]);
+export function favoritePool<T>(items: readonly T[], engine: string, favorites: readonly string[],
+  onlyFavorites: boolean, id: (item: T) => string): T[] {
+  return items.filter((item) => !onlyFavorites || favorites.includes(favoriteKey(engine, id(item))));
+}
+export function loadPresetPreferences() {
+  try {
+    const p = JSON.parse(localStorage.getItem("wavescope-library") ?? "{}");
+    return { favorites: Array.isArray(p.favorites) ? p.favorites.filter((f: unknown): f is string => typeof f === "string") : [],
+      shuffleFavorites: p.shuffleFavorites === true };
+  } catch { return { favorites: [] as string[], shuffleFavorites: false }; }
+}

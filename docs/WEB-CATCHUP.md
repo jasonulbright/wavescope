@@ -55,3 +55,9 @@ The engine/output changes also receive a dedicated review and correction pass.
   In the real WASM engine, `per_frame_1=zoom = ( ;` reports a line/column syntax
   error while WaveScope Tunnel continues rendering. Verified discard and a
   named ten-second morph to Bloom. The build passes with 41 tests.
+- Audience output: seven lifecycle regressions cover the handshake, stale
+  playback promises, renderer replacement, blackout, closed windows, navigation,
+  blocked popups and capture/playback errors. Live local output reports decoded
+  1920×1080 frames, including after a projectM/Butterchurn switch. The operator
+  layout keeps its 16:9 preview, performance controls and setup deck separate.
+  Production build passes with 48 tests. See `VENUE-WORKFLOW.md`.

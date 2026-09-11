@@ -81,6 +81,34 @@
 }
 
 @layer components {
+  .operator-console {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(160px, 1fr) auto auto;
+    gap: 16px;
+    padding: 16px 24px 0;
+    overflow: auto;
+  }
+  .operator-header { grid-row: 1; }
+  .operator-stage { grid-row: 2; position: relative; container-type: size; }
+  .operator-performance { grid-row: 3; }
+  .operator-console [data-testid="control-deck"] {
+    grid-row: 4;
+    position: relative;
+    inset: auto;
+    margin: 0 -24px;
+  }
+  .operator-preview {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(100cqw, calc(100cqh * 16 / 9));
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #000;
+    outline: 1px solid #ffffff30;
+  }
   button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
     outline: 2px solid var(--color-ultra-soft);
     outline-offset: 3px;

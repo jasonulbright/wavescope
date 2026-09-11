@@ -25,6 +25,8 @@ import { PresetLab } from "../components/ws/PresetLab";
 import { saveNewPreset, favoriteKey, favoritePool, loadPresetPreferences } from "../lib/viz/preset-library";
 import { PresetBrowser } from "../components/ws/PresetBrowser";
 import { AudioPlayer } from "../components/ws/AudioPlayer";
+import { OutputPanel } from "../components/ws/OutputPanel";
+import { AudienceOutput, EMPTY_OUTPUT } from "../lib/viz/audience-output";
 import { ProjectMCanvas, type ProjectMApi } from "../components/ws/ProjectMCanvas";
 import {
   loadMilkdrop,
@@ -192,6 +194,16 @@ function VizPage() {
   const settingsLoaded = useRef(false);
   const [source, setSource] = useState<SourceKind | null>(null);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [outputOpen, setOutputOpen] = useState(false);
+  const [outputState, setOutputState] = useState(EMPTY_OUTPUT);
+  const outputRef = useRef<AudienceOutput | null>(null);
+  const [automationHeld, setAutomationHeld] = useState(false);
+  useEffect(() => {
+    if (follow || embed) return;
+    const output = new AudienceOutput(() => rootRef.current?.querySelector("canvas") ?? null, setOutputState);
+    outputRef.current = output;
+    return () => { output.dispose(); outputRef.current = null; };
+  }, [follow, embed]);
   const armGeneration = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [uiVisible, setUiVisible] = useState(true);
@@ -229,6 +241,8 @@ function VizPage() {
     [calm],
   );
   const resolution = RESOLUTIONS.find((r) => r.id === resId) ?? RESOLUTIONS[0];
+  // Projector resolution is independent of the smaller operator preview.
+  const renderHeight = outputState.open && resolution.height === 0 ? 1080 : resolution.height;
 
   // Restore persisted preferences (client-only), then keep them saved.
   useEffect(() => {
@@ -781,7 +795,7 @@ function VizPage() {
   // optionally to a random palette from the user's include list. Negative
   // interval = auto-DJ (engines hop too). VJ mode has its own effect below.
   useEffect(() => {
-    if (!shuffleSec || shuffleSec === VJ_SEC || labOpen) return;
+    if (!shuffleSec || shuffleSec === VJ_SEC || labOpen || automationHeld) return;
     const iv = setInterval(() => {
       if (shuffleSec < 0) {
         djHop();
@@ -836,14 +850,14 @@ function VizPage() {
       }
     }, Math.abs(shuffleSec) * 1000);
     return () => clearInterval(iv);
-  }, [shuffleSec, autoModes, shufflePalettes, shuffleInclude, allPalettes, milk, autoMilk, morphSec, pm, autoPm, gpu, autoGpu, djHop, labOpen]);
+  }, [shuffleSec, autoModes, shufflePalettes, shuffleInclude, allPalettes, milk, autoMilk, morphSec, pm, autoPm, gpu, autoGpu, djHop, labOpen, automationHeld]);
 
   // Auto-VJ: audio-driven switching instead of a timer. Bass energy feeds a
   // fast and a slow envelope; the fast one spiking over the slow one is a
   // drop → hard cut to another preset/mode. A long stretch without a drop
   // morphs gently instead (MilkDrop blends 5 s; other engines just switch).
   useEffect(() => {
-    if (shuffleSec !== VJ_SEC || labOpen) return;
+    if (shuffleSec !== VJ_SEC || labOpen || automationHeld) return;
     let slow = 0;
     let fast = 0;
     let seeded = false;
@@ -914,7 +928,7 @@ function VizPage() {
       if (held > LULL_MS) hop(5); // lull: slow morph
     }, 150);
     return () => clearInterval(iv);
-  }, [shuffleSec, milk, autoMilk, pm, autoPm, gpu, autoGpu, autoModes, getFrame, labOpen]);
+  }, [shuffleSec, milk, autoMilk, pm, autoPm, gpu, autoGpu, autoModes, getFrame, labOpen, automationHeld]);
 
   const cycleShuffle = useCallback(() => {
     setShuffleSec((cur) => {
@@ -988,11 +1002,11 @@ function VizPage() {
     const onKey = (e: KeyboardEvent) => {
       if (embed || e.defaultPrevented || e.isComposing) return;
       if (labOpen) return; // The editor owns Escape and save/discard handling.
-      if (spotifyOpen || settingsOpen || helpOpen || browserOpen || playerOpen) {
+      if (spotifyOpen || settingsOpen || helpOpen || browserOpen || playerOpen || outputOpen) {
         if (e.key === "Escape") {
           e.preventDefault();
           setSpotifyOpen(false); setSettingsOpen(false); setHelpOpen(false); setBrowserOpen(false);
-          setPlayerOpen(false);
+          setPlayerOpen(false); setOutputOpen(false);
         }
         return;
       }
@@ -1019,6 +1033,10 @@ function VizPage() {
       )
         return;
       switch (e.key) {
+        case "o":
+        case "O":
+          if (!follow) setOutputOpen(true);
+          break;
         case "F5":
           e.preventDefault();
           if (!follow) setPlayerOpen(true);
@@ -1079,7 +1097,7 @@ function VizPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused, pm, pmPlaying.text]);
+  }, [cycleMode, cyclePalette, cycleShuffle, toggleFullscreen, openDisplays, follow, embed, milk, toggleRecord, labOpen, spotifyOpen, settingsOpen, helpOpen, browserOpen, playerOpen, source, uiVisible, deckFocused, pm, pmPlaying.text, outputOpen]);
 
   // Auto-hide the deck after 3s of stillness once a source is live.
   useEffect(() => {
@@ -1092,7 +1110,7 @@ function VizPage() {
       setUiVisible(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       hideTimer.current = setTimeout(() => {
-        if ((source || follow) && !controlsPinned && !deckFocused && !labOpen && !spotifyOpen && !settingsOpen && !browserOpen && !helpOpen && !playerOpen) setUiVisible(false);
+        if ((source || follow) && !controlsPinned && !deckFocused && !labOpen && !spotifyOpen && !settingsOpen && !browserOpen && !helpOpen && !playerOpen && !outputOpen && !outputState.open) setUiVisible(false);
       }, 3000);
     };
     window.addEventListener("pointermove", onMove);
@@ -1101,7 +1119,7 @@ function VizPage() {
       window.removeEventListener("pointermove", onMove);
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [source, follow, embed, controlsPinned, deckFocused, labOpen, spotifyOpen, settingsOpen, browserOpen, helpOpen, playerOpen]);
+  }, [source, follow, embed, controlsPinned, deckFocused, labOpen, spotifyOpen, settingsOpen, browserOpen, helpOpen, playerOpen, outputOpen, outputState.open]);
 
   const needsArming = ready && !follow && !source && !embed;
 
@@ -1150,16 +1168,32 @@ function VizPage() {
     <div
       ref={rootRef}
       tabIndex={-1}
-      className={`relative h-dvh w-full overflow-hidden bg-scope ${
+      className={`relative w-full bg-scope ${outputState.open ? "operator-console" : "h-dvh overflow-hidden"} ${
         uiVisible ? "" : "cursor-none"
       }`}
     >
+      {outputState.open ? <>
+        <div className="operator-header flex flex-wrap items-center justify-between gap-3 font-meter text-xs text-white/75">
+          <span>{outputState.blackout ? "AUDIENCE BLACKOUT" : outputState.linked ? "AUDIENCE LIVE" : "OUTPUT CONNECTING"} · {outputState.size || canvasSize}</span>
+          <span>{currentVisual} · {fps} fps</span>
+          <button onClick={() => setOutputOpen(true)} className="border border-white/25 px-3 py-2">output settings</button>
+        </div>
+        <div className="operator-performance flex flex-wrap items-center justify-center gap-3 font-meter text-xs text-white">
+          <button onClick={() => cycleMode(-1)} className="border border-white/30 px-4 py-2">previous visual</button>
+          <button onClick={() => cycleMode(1)} className="border border-white/30 px-4 py-2">next visual</button>
+          {milk || pm ? <button onClick={() => morphTo()} className="border border-ultra bg-ultra/20 px-4 py-2">morph to {morphTarget || "shuffle"} · {morphSec}s</button> : null}
+          <button onClick={() => setAutomationHeld((v) => !v)} aria-pressed={automationHeld} className="border border-white/30 px-4 py-2">{automationHeld ? "resume automation" : "hold automation"}</button>
+          <button onClick={() => outputRef.current?.blackout(!outputState.blackout)} className="border border-white/30 px-4 py-2">{outputState.blackout ? "restore audience" : "blackout audience"}</button>
+        </div>
+      </> : null}
+      <div className={outputState.open ? "operator-stage" : "absolute inset-0"}>
+      <div data-testid="visual-surface" className={outputState.open ? "operator-preview" : "absolute inset-0"}>
       {ready && gpuReady ? (
         <WebGPUCanvas
-          key={follow ? "gpu-follow" : "gpu-console"}
+          key={`gpu-${follow}-${renderHeight}`}
           modeId={gpuMode}
           getFrame={getFrame}
-          resolutionHeight={resolution.height}
+          resolutionHeight={renderHeight}
           onFps={setFps}
           onSize={setCanvasSize}
           onError={() => {
@@ -1170,6 +1204,7 @@ function VizPage() {
         />
       ) : ready && pmReady && milkAudio ? (
         <ProjectMCanvas
+          key={`pm-${renderHeight}`}
           audio={milkAudio}
           presetText={pmText}
           presetName={pmResolved.name}
@@ -1177,7 +1212,7 @@ function VizPage() {
           blendSecRef={pmBlendRef}
           onPresetLoaded={(name, text) => setPmPlaying((cur) => cur.name === name && cur.text === text ? cur : { name, text })}
           onPresetError={(message) => { setError(message); setPmPreset(pmPlaying.name || BUNDLED_MILK[0].name); }}
-          resolutionHeight={resolution.height}
+          resolutionHeight={renderHeight}
           onFps={setFps}
           onSize={setCanvasSize}
           onError={() => {
@@ -1188,10 +1223,11 @@ function VizPage() {
         />
       ) : ready && milkReady && milkAudio ? (
         <MilkdropCanvas
+          key={`milk-${renderHeight}`}
           audio={milkAudio}
           presetName={milkPreset}
           extraPresets={customMilk}
-          resolutionHeight={resolution.height}
+          resolutionHeight={renderHeight}
           apiRef={milkApiRef}
           blendSecRef={milkBlendRef}
           onPresetLoaded={setMilkPlaying}
@@ -1206,12 +1242,15 @@ function VizPage() {
           modeId={modeId}
           palette={palette}
           paletteRef={paletteRef}
-          resolutionHeight={resolution.height}
+          resolutionHeight={renderHeight}
           getFrame={getFrame}
           onFps={setFps}
           onSize={setCanvasSize}
         />
       ) : null}
+
+      </div>
+      </div>
 
       <input
         ref={fileInputRef}
@@ -1225,7 +1264,8 @@ function VizPage() {
         }}
       />
 
-      {/* HUD (top-left). aria-live so screen readers announce source/mode/fps. */}
+      {/* Console status stays on the operator screen. */}
+      {!outputState.open ? <>
       <div
         role="status"
         aria-live="polite"
@@ -1251,9 +1291,11 @@ function VizPage() {
         WaveScope home
       </Link>
 
+      </> : null}
+
       {/* Arm-a-source overlay: first run. */}
       {needsArming ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-scope/80 p-6">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-scope/80 p-6">
           <div className="w-full max-w-lg border border-white/15 bg-scope p-8">
             <p className="readout text-ultra-soft">WAVESCOPE CONSOLE</p>
             <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-paper">
@@ -1318,10 +1360,11 @@ function VizPage() {
       {/* Control deck (bottom). */}
       <div
         ref={deckRef}
+        data-testid="control-deck"
         inert={!uiVisible || embed}
         onFocusCapture={() => { setDeckFocused(true); setUiVisible(true); }}
         onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDeckFocused(false); }}
-        className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
+        className={`transition-opacity duration-300 ${outputState.open ? "" : "absolute inset-x-0 bottom-0"} ${
           uiVisible ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
@@ -1329,6 +1372,8 @@ function VizPage() {
           <button onClick={() => setControlsPinned((v) => !v)} aria-pressed={controlsPinned}
             className="border border-white/25 px-3 py-1.5 font-meter text-xs text-white/80"
             title="Keep the control deck visible">{controlsPinned ? "unpin controls" : "pin controls"}</button>
+          {!follow ? <button onClick={() => setOutputOpen(true)}
+            className="border border-ultra/70 px-3 py-1.5 font-meter text-xs text-ultra-soft">output (O)</button> : null}
           {!follow ? (
             <div className="flex items-center gap-1.5">
               <span className="readout mr-1 text-white/40">SRC</span>
@@ -1680,7 +1725,7 @@ function VizPage() {
             >
               {RESOLUTIONS.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {outputState.open && r.height === 0 ? "Auto (1080p output)" : r.name}
                 </option>
               ))}
             </select>
@@ -1713,7 +1758,7 @@ function VizPage() {
                 onClick={() => void openDisplays()}
                 className="border border-white/15 px-3 py-1.5 font-meter text-xs text-white/60 hover:border-white/40 hover:text-white active:scale-[0.97]"
               >
-                displays{displayCount ? ` +${displayCount}` : ""}
+                companions{displayCount ? ` +${displayCount}` : ""}
               </button>
             ) : null}
             <button
@@ -1785,6 +1830,12 @@ function VizPage() {
         onClose={() => setBrowserOpen(false)}
       /> : null}
 
+      {outputOpen && !embed ? <OutputPanel state={outputState}
+        onOpen={() => { outputRef.current?.open(); setUiVisible(true); }}
+        onStop={() => outputRef.current?.close()}
+        onBlackout={() => outputRef.current?.blackout(!outputState.blackout)}
+        onClose={() => setOutputOpen(false)} /> : null}
+
       {/* Spotify overlay. */}
       {playerOpen && !embed && engineRef.current ? <AudioPlayer engine={engineRef.current}
         onClose={() => setPlayerOpen(false)} onChoose={() => fileInputRef.current?.click()} /> : null}
@@ -1821,7 +1872,7 @@ function VizPage() {
       {helpOpen ? (
         <HelpOverlay onClose={() => setHelpOpen(false)}>
           <div
-            className="w-full max-w-md border border-white/15 bg-scope p-8"
+            className="max-h-full w-full max-w-lg overflow-y-auto border border-white/15 bg-scope p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="readout text-ultra-soft">SHORTCUTS</p>
@@ -1835,10 +1886,15 @@ function VizPage() {
                 ["P", "cycle trace palette"],
                 ["S", "cycle shuffle timer"],
                 ["C", "toggle calm mode"],
-                ["M", "open companion displays"],
-                ["L", "preset lab (MilkDrop engine)"],
+                ["O", "audience output"],
+                ["B", "browse visuals and favorites"],
+                ["F5", "audio-file player"],
+                ["Ctrl + Space", "pause or resume audio file"],
+                ["M", "open independent companions"],
+                ["L", "preset lab (MilkDrop / projectM)"],
                 ["?", "this overlay"],
-                ["Esc", "show controls"],
+                ["Tab", "show and focus controls"],
+                ["Esc", "close dialog / leave controls"],
               ].map(([k, d]) => (
                 <div key={k} className="contents">
                   <dt className="text-ultra-soft">{k}</dt>

@@ -21,7 +21,8 @@ const TOC = [
   { id: "signals", label: "Signals" },
   { id: "visualizers", label: "Visualizers" },
   { id: "resolution", label: "Resolution" },
-  { id: "displays", label: "Multi-display" },
+  { id: "audience", label: "Stage output" },
+  { id: "displays", label: "Companions" },
   { id: "shortcuts", label: "Shortcuts" },
   { id: "support", label: "Browser support" },
   { id: "math", label: "The math" },
@@ -37,7 +38,14 @@ const SHORTCUTS: Array<[string, string]> = [
   ["S", "Cycle the shuffle timer (off, 15s–5m, DJ, VJ)"],
   ["C", "Toggle calm mode (photosensitivity-friendly)"],
   ["M", "Open companion windows on other displays"],
-  ["L", "Preset lab (MilkDrop engine only)"],
+  ["O", "Audience output settings"],
+  ["B", "Search visuals and favorites"],
+  ["F5", "Audio-file player"],
+  ["Ctrl / Cmd + Space", "Pause or resume audio file"],
+  ["L", "Preset lab (projectM or Butterchurn)"],
+  ["Ctrl / Cmd + Enter", "Apply the lab draft"],
+  ["Ctrl / Cmd + S", "Save lab draft as a new preset"],
+  ["Tab", "Reveal and focus hidden controls"],
   ["?", "Shortcut overlay"],
   ["Esc", "Show controls, close overlays"],
 ];
@@ -95,13 +103,12 @@ function DocsPage() {
             The WaveScope manual
           </h1>
           <P>
-            WaveScope is a real-time music visualizer that runs entirely in
-            your browser. It analyzes an audio signal 60 times a second and
-            draws it through one of three rendering engines: 34 built-in
-            mathematical modes, real MilkDrop presets (the projectM engine
-            compiled to WebAssembly, plus Butterchurn), and GPU-native WebGPU
-            shaders. All of it renders up to 8K, fullscreen, on every display
-            you own. No account, no install, no upload.
+            WaveScope is a real-time music visualizer that runs entirely in your browser. It
+            analyzes an audio signal 60 times a second and draws it through one of three rendering
+            engines: 34 built-in mathematical modes, real MilkDrop presets (the projectM engine
+            compiled to WebAssembly, plus Butterchurn), and GPU-native WebGPU shaders. All of it
+            renders up to 8K, fullscreen, on every display you own. No account, no install, no
+            upload.
           </P>
 
           <div className="mt-8 flex flex-wrap gap-5">
@@ -120,206 +127,205 @@ function DocsPage() {
           <div className="mt-16" />
           <H2 id="signals">Signals</H2>
           <P>
-            The console reads one signal at a time. Arm it from the deck at the
-            bottom of the screen, or from the panel that appears on first
-            launch.
+            The console reads one signal at a time. Arm it from the deck at the bottom of the
+            screen, or from the panel that appears on first launch.
           </P>
 
           <H3>System audio (music playing on this machine)</H3>
           <P>
-            Pick <em>system</em> in the deck. The browser opens its screen
-            share dialog: choose a tab (for example the tab playing YouTube
-            Music) or an entire screen, and tick the <em>Share audio</em>{" "}
-            checkbox before confirming. WaveScope uses only the audio track;
-            the shared video is never shown or recorded. If the meter stays
-            flat, the share was started without the audio checkbox: stop and
-            re-share with it ticked.
+            Pick <em>system</em> in the deck. The browser opens its screen share dialog: choose a
+            tab (for example the tab playing YouTube Music) or an entire screen, and tick the{" "}
+            <em>Share audio</em> checkbox before confirming. WaveScope uses only the audio track;
+            the shared video is never shown or recorded. If the meter stays flat, the share was
+            started without the audio checkbox: stop and re-share with it ticked.
           </P>
 
           <H3>Spotify</H3>
           <P>
-            The <em>spotify</em> button in the deck gets Spotify playing and
-            visualized with the fewest clicks. Quick path: open Spotify,
-            press play there, come back and hit <em>capture the sound</em>{" "}
-            (tick Share audio in the picker). One-button mode: connect your
-            Spotify account (Premium, plus a free developer app whose Client
-            ID you paste once; the panel walks you through it) and the play
-            button starts playback on your device remotely, with the current
-            track shown in the HUD while capturing.
+            The <em>spotify</em> button in the deck gets Spotify playing and visualized with the
+            fewest clicks. Quick path: open Spotify, press play there, come back and hit{" "}
+            <em>capture the sound</em> (tick Share audio in the picker). One-button mode: connect
+            your Spotify account (Premium, plus a free developer app whose Client ID you paste once;
+            the panel walks you through it) and the play button starts playback on your device
+            remotely, with the current track shown in the HUD while capturing.
           </P>
           <P>
-            WaveScope listens through the system capture rather than
-            Spotify's own stream, which is DRM protected. Your Spotify tokens
-            stay in this browser; nothing about your account touches a
-            server.
+            WaveScope listens through the system capture rather than Spotify's own stream, which is
+            DRM protected. Your Spotify tokens stay in this browser; nothing about your account
+            touches a server.
           </P>
 
           <H3>Microphone (ambient capture)</H3>
           <P>
-            Pick <em>mic</em> and allow the permission prompt. Echo
-            cancellation and noise suppression are disabled on purpose so
-            music is captured faithfully rather than filtered as if it were a
-            phone call. This is the mode for visualizing a room, a speaker
-            system, or an instrument.
+            Pick <em>mic</em> and allow the permission prompt. Echo cancellation and noise
+            suppression are disabled on purpose so music is captured faithfully rather than filtered
+            as if it were a phone call. This is the mode for visualizing a room, a speaker system,
+            or an instrument.
           </P>
 
           <H3>Audio file</H3>
           <P>
-            Pick <em>file</em> and choose a track from disk. It plays through
-            your speakers, loops, and is analyzed locally. Any format your
-            browser can play works (mp3, flac, wav, ogg, m4a in most
-            browsers).
+            Pick <em>file</em> and choose a track from disk. It plays through your speakers, loops
+            by default, and is analyzed locally. Open the player with <Kbd>F5</Kbd> or the active
+            file button to pause, seek, replay, or turn looping off. Seeking while paused stays
+            paused; closing the player keeps the track running. Any format your browser can play
+            works (mp3, flac, wav, ogg, m4a in most browsers).
           </P>
 
           <H3>Demo oscillator</H3>
           <P>
-            A built-in test signal: a slow synth chord progression with a
-            synthetic kick drum. It needs no permissions, produces no sound,
-            and exists so you can audition visualizers instantly. The landing
-            page runs on it too.
+            A built-in test signal: a slow synth chord progression with a synthetic kick drum. It
+            needs no permissions, produces no sound, and exists so you can audition visualizers
+            instantly. The landing page runs on it too.
           </P>
 
           {/* VISUALIZERS */}
           <div className="mt-14" />
           <H2 id="visualizers">Visualizers, all 34</H2>
           <P>
-            Modes are grouped into five families. Cycle them with{" "}
-            <Kbd>Space</Kbd>, or pick from the deck's mode menu. Each mode is
-            pure math over the same analyzed frame: a 1024-bin spectrum, a
-            2048-sample waveform, band energies, and a beat envelope.
+            Modes are grouped into five families. Cycle them with <Kbd>Space</Kbd>, or pick from the
+            deck's mode menu. Each mode is pure math over the same analyzed frame: a 1024-bin
+            spectrum, a 2048-sample waveform, band energies, and a beat envelope.
           </P>
           <P>
-            Prefer variety without touching anything? Set the <em>SHUFFLE</em>{" "}
-            timer in the deck (or press <Kbd>S</Kbd>) and the console hops to a
-            random mode every 15 seconds to 5 minutes. Each window shuffles
-            independently, so a multi-display setup drifts through different
-            combinations on its own. In the <em>palettes + shuffle</em> panel
-            you can also let the shuffle rotate trace palettes, and check
-            exactly which palettes it is allowed to pick from. The <em>VJ</em>{" "}
-            option switches on the signal instead of a timer: a sustained bass
-            rise reads as a drop and hard-cuts to a new preset or mode, and a
-            long stretch without one morphs gently instead.
+            Prefer variety without touching anything? Set the <em>SHUFFLE</em> timer in the deck (or
+            press <Kbd>S</Kbd>) and the console hops to a random mode every 15 seconds to 5 minutes.
+            Each window shuffles independently, so a multi-display setup drifts through different
+            combinations on its own. In the <em>palettes + shuffle</em> panel you can also let the
+            shuffle rotate trace palettes, and check exactly which palettes it is allowed to pick
+            from. The <em>VJ</em> option switches on the signal instead of a timer: a sustained bass
+            rise reads as a drop and hard-cuts to a new preset or mode, and a long stretch without
+            one morphs gently instead.
+          </P>
+
+          <H3>Search, favorites and controls</H3>
+          <P>
+            Open <em>browse</em> (<Kbd>B</Kbd>) to search the current engine. A single click selects
+            a result without taking it live; use
+            <em> Play selected</em> or double-click to play it. Favorites are saved separately for
+            each engine. <em>Shuffle favorites only</em>
+            restricts timed shuffle, DJ, VJ and random morph targets. If an engine has no eligible
+            favorites, it holds its current picture.
+          </P>
+          <P>
+            <em>Pin controls</em> keeps the deck visible and is remembered. Otherwise it hides after
+            three seconds of stillness. Keyboard focus and open dialogs keep it visible;{" "}
+            <Kbd>Tab</Kbd> reveals a hidden deck and focuses its first control. Shortcuts do not
+            steal arrows or typing from fields, menus, buttons or dialogs.
           </P>
 
           <H3>MilkDrop presets</H3>
           <P>
-            The <em>milkdrop</em> button in the deck switches the console to a
-            second render engine: Butterchurn, the WebGL port of Winamp's
-            MilkDrop 2, bundled with a library of converted classic .milk
-            presets (Geiss, Flexi, Martin, shifter and more). Each preset's
-            equations compile to WebAssembly the moment it loads. The mode
-            menu becomes a preset menu, <Kbd>Space</Kbd> and the arrows cycle
-            presets with MilkDrop's classic 2.7 second blend, and the shuffle
-            timer hops presets. The engine loads on demand (about 1 MB, one
-            time) and needs WebGL.
+            The <em>milkdrop</em> button in the deck switches the console to a second render engine:
+            Butterchurn, the WebGL port of Winamp's MilkDrop 2, bundled with a library of converted
+            classic .milk presets (Geiss, Flexi, Martin, shifter and more). Each preset's equations
+            compile to WebAssembly the moment it loads. The mode menu becomes a preset menu,{" "}
+            <Kbd>Space</Kbd> and the arrows cycle presets with MilkDrop's classic 2.7 second blend,
+            and the shuffle timer hops presets. The engine loads on demand (about 1 MB, one time)
+            and needs WebGL.
           </P>
           <P>
-            MilkDrop works on every display: in a companion window, click once
-            to link audio and the <em>milkdrop</em> button appears there too,
-            with its own preset, resolution, and shuffle. Trace palettes and
-            calm mode do not apply while MilkDrop is active; presets carry
-            their own colors and motion, and many flash hard, so switch back
-            to the built-in engine if you need the calm guarantee. Running
-            MilkDrop on several monitors at once is real GPU work; step the
-            resolution down per window if frames drop.
+            MilkDrop works on every display: in a companion window, click once to link audio and the{" "}
+            <em>milkdrop</em> button appears there too, with its own preset, resolution, and
+            shuffle. Trace palettes and calm mode do not apply while MilkDrop is active; presets
+            carry their own colors and motion, and many flash hard, so switch back to the built-in
+            engine if you need the calm guarantee. Running MilkDrop on several monitors at once is
+            real GPU work; step the resolution down per window if frames drop.
           </P>
 
           <H3>The preset lab</H3>
           <P>
-            While MilkDrop is active, <em>lab</em> in the deck (<Kbd>L</Kbd>)
-            opens an editor on the active preset's equations: the init,
-            per-frame, and per-pixel eel blocks, the same language raw .milk
-            files use. <em>Apply</em> (<Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>)
-            recompiles the edited copy to WebAssembly and cuts the visual to
-            it against the live signal; the readout under the editor shows the
-            compile time, or the compiler's error if the eel does not parse —
-            the previous preset keeps running either way. <em>Save</em> stores
-            the edit as one of your presets under a new name, and{" "}
-            <em>export</em> downloads it as a Butterchurn JSON file.
+            While MilkDrop is active, <em>lab</em> in the deck (<Kbd>L</Kbd>) opens an editor on the
+            active preset's equations: the init, per-frame, and per-pixel eel blocks, the same
+            language raw .milk files use. <em>Apply</em> (<Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>)
+            recompiles the edited copy to WebAssembly and cuts the visual to it against the live
+            signal; the readout under the editor shows the compile time, or the compiler's error if
+            the eel does not parse — the previous preset keeps running either way. <em>Save</em>{" "}
+            stores the edit as one of your presets under a new name, and <em>export</em> downloads
+            it as a Butterchurn JSON file.
+          </P>
+
+          <P>
+            The projectM lab edits the complete raw .milk source and exports .milk files. Automation
+            pauses while either lab is open. Unsaved edits prompt you to save, discard the draft or
+            keep editing. Failed saves retain the draft; Save As never overwrites an existing
+            preset. Apply changes the live visual without saving it. Discarding the draft does not
+            undo an already applied visual.
           </P>
 
           <H3>The morph deck</H3>
           <P>
-            Next to the lab, the <em>MORPH</em> row holds a target, a
-            blend-length slider (0.5–10 seconds), and a <em>morph</em> button
-            that crossfades from whatever is playing to the target over that
-            length using MilkDrop's own blend — long for slow scene changes,
-            short for cuts. The target defaults to <em>shuffle</em>, which
-            morphs to a random preset each press; pick a name instead to
-            rehearse a specific transition. The main picker follows the
-            morph, and while MilkDrop is active the <em>SHUFFLE</em> timer's
-            preset hops blend with this same length.
+            Both MilkDrop engines offer a <em>MORPH</em> row with a target, a blend-length slider
+            (0.5–10 seconds), and a <em>morph</em> button that crossfades from whatever is playing
+            to the target over that length using the engine's own blend. <em>Cut to target</em>{" "}
+            switches immediately. Direct projectM picker changes also cut; Butterchurn picker
+            changes retain their 2.7-second blend. The target defaults to <em>shuffle</em>, which
+            morphs to a random preset each press; pick a name instead to rehearse a specific
+            transition. The main picker follows the morph, and while MilkDrop is active the{" "}
+            <em>SHUFFLE</em> timer's preset hops blend with this same length.
           </P>
 
           <H3>projectM: raw .milk presets</H3>
           <P>
-            On browsers with WebGL2, a second MilkDrop engine is available: the{" "}
-            <em>projectM</em> button in the deck. This is the real MilkDrop
-            engine (libprojectM) compiled to WebAssembly, so unlike Butterchurn
-            it runs <em>raw .milk preset files directly</em>, per-pixel warp
-            shaders and all. Cycle presets with <Kbd>Space</Kbd> and the
-            arrows, and the shuffle timer works the same way.
+            On browsers with WebGL2, a second MilkDrop engine is available: the <em>projectM</em>{" "}
+            button in the deck. This is the real MilkDrop engine (libprojectM) compiled to
+            WebAssembly, so unlike Butterchurn it runs <em>raw .milk preset files directly</em>,
+            per-pixel warp shaders and all. Cycle presets with <Kbd>Space</Kbd> and the arrows, and
+            the shuffle timer works the same way.
           </P>
           <P>
-            It ships with a few starter presets, but the point is your own
-            collection: <em>load .milk</em> imports raw .milk files (the entire
-            15-year MilkDrop preset archive works, no conversion). Uploaded
-            presets persist in your browser and can be removed while selected.
-            projectM and Butterchurn are separate engines with separate preset
-            lists; pick whichever the deck offers. projectM runs in the main
-            console window (companion displays keep Butterchurn or the built-in
-            modes).
+            It ships with a few starter presets, but the point is your own collection:{" "}
+            <em>load .milk</em> imports raw .milk files (the entire MilkDrop format needs no
+            conversion). Uploaded presets persist in your browser and can be removed while selected.
+            projectM and Butterchurn are separate engines with separate preset lists; pick whichever
+            the deck offers. A rejected preset reports its compiler error while the previous visual
+            keeps rendering. The picker follows successfully loaded presets. Available companion
+            engines depend on browser support and their audio link.
           </P>
 
           <H3>GPU shader modes (WebGPU)</H3>
           <P>
-            On browsers with WebGPU (Chrome and Edge today), the <em>GPU</em>{" "}
-            button adds a set of GPU-native modes: each is a fragment shader
-            that runs over every pixel at full resolution, up to 8K, which the
-            standard modes compute on the CPU. Plasma field, Warp tunnel, and
-            Fractal fold all react to the same bands and beat. Cycle them with{" "}
-            <Kbd>Space</Kbd> and the arrows; the shuffle timer works too. If
-            your device cannot start WebGPU, the button simply is not shown.
+            On browsers with WebGPU (Chrome and Edge today), the <em>GPU</em> button adds a set of
+            GPU-native modes: each is a fragment shader that runs over every pixel at full
+            resolution, up to 8K, which the standard modes compute on the CPU. Plasma field, Warp
+            tunnel, and Fractal fold all react to the same bands and beat. Cycle them with{" "}
+            <Kbd>Space</Kbd> and the arrows; the shuffle timer works too. If your device cannot
+            start WebGPU, the button simply is not shown.
           </P>
 
           <H3>Your own Butterchurn presets</H3>
           <P>
-            While the MilkDrop engine is active, <em>load preset</em> in the
-            deck imports your own preset files (several at once is fine). They
-            appear at the top of the preset menu under "your presets", join
-            the shuffle rotation, persist in your browser, and can be removed
+            While the MilkDrop engine is active, <em>load preset</em> in the deck imports your own
+            preset files (several at once is fine). They appear at the top of the preset menu under
+            "your presets", join the shuffle rotation, persist in your browser, and can be removed
             with the <em>remove</em> button while selected.
           </P>
           <P>
-            The Butterchurn engine takes Butterchurn JSON presets, its own
-            browser-ready format, with the equations as eel source (the lab's{" "}
-            <em>export</em> produces exactly this). Files from the old
-            converter that carry compiled-JS equations instead are refused
-            with a message — the engine no longer runs converted JavaScript.
-            If you have raw .milk files, do not convert them: use the{" "}
-            <em>projectM</em> engine instead, which loads them directly (see
-            above). Butterchurn is the fallback for browsers without WebGL2,
-            or if you already have a JSON collection. Like everything else in
-            WaveScope, uploaded presets never leave your machine.
+            The Butterchurn engine takes Butterchurn JSON presets, its own browser-ready format,
+            with the equations as eel source (the lab's <em>export</em> produces exactly this).
+            Files from the old converter that carry compiled-JS equations instead are refused with a
+            message — the engine no longer runs converted JavaScript. If you have raw .milk files,
+            do not convert them: use the <em>projectM</em> engine instead, which loads them directly
+            (see above). Butterchurn is the fallback for browsers without WebGL2, or if you already
+            have a JSON collection. Like everything else in WaveScope, uploaded presets never leave
+            your machine.
           </P>
 
           <H3>Calm mode</H3>
           <P>
-            The <em>calm</em> toggle in the deck (<Kbd>C</Kbd>) is the
-            photosensitivity-friendly setting. It removes the five modes with
-            sudden beat-driven bursts (Fountain, Starfield, Tunnel, Shards,
-            Pulse rings) from the picker and the shuffle, and softens the beat
-            envelope so the remaining modes pulse gently instead of jumping.
-            The setting is remembered per window, so a companion display can
-            stay calm while the main screen runs everything.
+            The <em>calm</em> toggle in the deck (<Kbd>C</Kbd>) is the photosensitivity-friendly
+            setting. It removes the five modes with sudden beat-driven bursts (Fountain, Starfield,
+            Tunnel, Shards, Pulse rings) from the picker and the shuffle, and softens the beat
+            envelope so the remaining modes pulse gently instead of jumping. The setting is
+            remembered per window, so a companion display can stay calm while the main screen runs
+            everything.
           </P>
 
           <H3>Custom palettes</H3>
           <P>
-            Open <em>palettes + shuffle</em> in the deck to build your own
-            trace palettes: pick up to three color stops, name the palette,
-            and it joins the trace menu and the shuffle list. Custom palettes
-            are stored in your browser (nothing is uploaded) and can be
+            Open <em>palettes + shuffle</em> in the deck to build your own trace palettes: pick up
+            to three color stops, name the palette, and it joins the trace menu and the shuffle
+            list. Custom palettes are stored in your browser (nothing is uploaded) and can be
             deleted from the same panel.
           </P>
           {FAMILIES.map((fam) => (
@@ -327,16 +333,11 @@ function DocsPage() {
               <H3>{fam.name}</H3>
               <dl className="mt-3 divide-y divide-ink/8 border-y border-ink/10">
                 {MODES.filter((m) => m.family === fam.id).map((m) => (
-                  <div
-                    key={m.id}
-                    className="grid gap-1 py-3 sm:grid-cols-[200px_1fr] sm:gap-6"
-                  >
+                  <div key={m.id} className="grid gap-1 py-3 sm:grid-cols-[200px_1fr] sm:gap-6">
                     <dt className="font-meter text-sm font-bold text-ink">
                       {String(MODES.indexOf(m) + 1).padStart(2, "0")} {m.name}
                     </dt>
-                    <dd className="text-sm leading-relaxed text-ink-soft">
-                      {m.description}
-                    </dd>
+                    <dd className="text-sm leading-relaxed text-ink-soft">{m.description}</dd>
                   </div>
                 ))}
               </dl>
@@ -349,62 +350,86 @@ function DocsPage() {
           <div className="mt-6 flex items-start gap-5">
             <img src="/assets/icons/icon-gauge.png" alt="" className="h-12 w-12 shrink-0" />
             <P>
-              The <em>RES</em> menu sets the canvas backing store. <em>Auto</em>{" "}
-              renders at your display's native pixel density and is right for
-              almost everyone. Fixed targets (Full HD, QHD, 4K, 8K) render at
-              that pixel height regardless of the window, then scale to fit:
-              use them to drive a high-density output or to lighten the load
-              on a weak GPU.
+              The <em>RES</em> menu sets the canvas backing store. <em>Auto</em> renders at your
+              display's native pixel density and is right for almost everyone. Fixed targets (Full
+              HD, QHD, 4K, 8K) render at that pixel height regardless of the window, then scale to
+              fit: use them to drive a high-density output or to lighten the load on a weak GPU.
             </P>
           </div>
           <P>
-            8K (7680x4320) is roughly 33 million pixels per frame. Particle
-            and field modes stay smooth because their cost scales with element
-            count, not pixels; full-surface modes like Plasma and Waterfall
-            render internally at a fixed resolution and upscale, so they stay
-            cheap at any target. If frames drop below 60 on the HUD, step the
-            resolution down one notch before blaming the math.
+            8K (7680x4320) is roughly 33 million pixels per frame. Particle and field modes stay
+            smooth because their cost scales with element count, not pixels; full-surface modes like
+            Plasma and Waterfall render internally at a fixed resolution and upscale, so they stay
+            cheap at any target. If frames drop below 60 on the HUD, step the resolution down one
+            notch before blaming the math.
           </P>
           <P>
-            On modern browsers the console draws on a separate thread from the
-            controls (via an off-screen canvas), so even a heavy 8K mode never
-            makes the deck or menus stutter. Browsers without that capability
-            fall back to drawing inline, which looks identical and just shares
-            one thread.
+            On modern browsers the console draws on a separate thread from the controls (via an
+            off-screen canvas), so even a heavy 8K mode never makes the deck or menus stutter.
+            Browsers without that capability fall back to drawing inline, which looks identical and
+            just shares one thread.
           </P>
 
           {/* DISPLAYS */}
           <div className="mt-14" />
-          <H2 id="displays">Multi-display setups</H2>
+          <H2 id="audience">A band, an operator and a projector</H2>
+          <P>
+            Use extended desktop mode. Keep WaveScope on the laptop, start
+            <em> demo</em> for a picture check, then choose <em>output</em>(<Kbd>O</Kbd>) and{" "}
+            <em>Open audience window</em>. Move that window onto the projector and double-click it
+            or press <Kbd>F</Kbd> for fullscreen. The console reports a live connection after the
+            audience video decodes frames.
+          </P>
+          <P>
+            Your operator preview and the audience share one rendered canvas. Controls, searches,
+            editors, cursor and errors stay on the laptop. Auto resolution becomes 1080p for output,
+            independently of preview size; an explicit RES choice takes precedence. projectM keeps
+            its 1440p cap. The audience window carries no audio.
+          </P>
+          <P>
+            At soundcheck, switch to <em>mic</em> for the band. A feed from the mixing desk through
+            a USB audio interface can be selected as the browser microphone. Use <em>system</em> for
+            music already playing on the laptop. Keep the console visible throughout the show.
+          </P>
+          <P>
+            Prepare named morph targets in the browser without changing the picture. Perform with
+            next/previous, morph and <em>hold automation</em>. Hold pauses automatic changes while
+            manual controls and audio keep working. <em>Blackout audience</em> hides the projector
+            picture while your preview continues; restore it when ready.
+          </P>
+          <P>
+            For OBS, use Window Capture on <em>WaveScope Audience Output</em>, crop any window
+            borders and add audio separately. Closing output returns to the normal console. Engine
+            switches can briefly blank output while the new canvas starts; blackout survives the
+            switch. Rehearse the exact projector and capture setup before a show.
+          </P>
+
+          <div className="mt-14" />
+          <H2 id="displays">Independent companion displays</H2>
           <div className="mt-6 flex items-start gap-5">
             <img src="/assets/icons/icon-dual.png" alt="" className="h-12 w-12 shrink-0" />
             <P>
-              One console window owns the signal. Press <Kbd>M</Kbd> (or the{" "}
-              <em>displays</em> button) and WaveScope opens a companion window
-              on each additional monitor: same signal, but each window picks
-              its own mode, palette, and resolution.
+              One console window owns the signal. Press <Kbd>M</Kbd> (or the <em>companions</em>{" "}
+              button) and WaveScope opens a companion window on each additional monitor: same
+              signal, but each window picks its own mode, palette, and resolution.
             </P>
           </div>
           <P>
-            Click once in each companion to <em>link audio</em>: the console
-            streams its raw audio to that window, which rebuilds a full local
-            audio graph from it. A linked companion has complete engine
-            parity with the console, including audio-rate analysis and the
-            MilkDrop engine with its own preset. (The one click is a browser
-            requirement; until it happens, the window runs the built-in modes
-            from broadcast analysis frames.)
+            Click once in each companion to <em>link audio</em>: the console streams its raw audio
+            to that window, which rebuilds a full local audio graph from it. A linked companion has
+            complete engine parity with the console, including audio-rate analysis and the MilkDrop
+            engine with its own preset. (The one click is a browser requirement; until it happens,
+            the window runs the built-in modes from broadcast analysis frames.)
           </P>
           <P>
-            In Chrome and Edge, allow the <em>window management</em> permission
-            when asked: companions then open positioned on each physical
-            display automatically. Without it, one companion opens as a
-            regular popup: drag it to the target display and press{" "}
-            <Kbd>F</Kbd>. Repeat for as many displays as you have.
+            In Chrome and Edge, allow the <em>window management</em> permission when asked:
+            companions then open positioned on each physical display automatically. Without it, one
+            companion opens as a regular popup: drag it to the target display and press <Kbd>F</Kbd>
+            . Repeat for as many displays as you have.
           </P>
           <P>
-            The console must stay open: it is the analyzer. Closing it freezes
-            companions within two seconds (they show a waiting notice until it
-            returns).
+            The console must stay open: it is the analyzer. Closing it freezes companions within two
+            seconds (they show a waiting notice until it returns).
           </P>
 
           {/* SHORTCUTS */}
@@ -424,8 +449,8 @@ function DocsPage() {
                 ))}
               </dl>
               <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-                The deck also hides itself after three seconds of stillness;
-                move the pointer to bring it back.
+                The deck also hides itself after three seconds of stillness; move the pointer to
+                bring it back.
               </p>
             </div>
           </div>
@@ -440,39 +465,35 @@ function DocsPage() {
                 <div className="grid gap-1 py-3 sm:grid-cols-[200px_1fr] sm:gap-6">
                   <dt className="font-meter text-sm font-bold text-ink">Chrome, Edge</dt>
                   <dd className="text-sm leading-relaxed text-ink-soft">
-                    Everything works: tab and screen audio capture, microphone,
-                    files, multi-display placement via window management, and
-                    all three engines (built-in modes, projectM, and the
-                    WebGPU shaders).
+                    Everything works: tab and screen audio capture, microphone, files, multi-display
+                    placement via window management, and all three engines (built-in modes,
+                    projectM, and the WebGPU shaders).
                   </dd>
                 </div>
                 <div className="grid gap-1 py-3 sm:grid-cols-[200px_1fr] sm:gap-6">
                   <dt className="font-meter text-sm font-bold text-ink">Firefox</dt>
                   <dd className="text-sm leading-relaxed text-ink-soft">
-                    Microphone, files, and demo work; the built-in modes and
-                    the projectM MilkDrop engine run. System audio capture and
-                    automatic window placement are not supported; companions
-                    open as popups you position yourself. The GPU engine
+                    Microphone, files, and demo work; the built-in modes and the projectM MilkDrop
+                    engine run. System audio capture and automatic window placement are not
+                    supported; companions open as popups you position yourself. The GPU engine
                     appears only if your build has WebGPU.
                   </dd>
                 </div>
                 <div className="grid gap-1 py-3 sm:grid-cols-[200px_1fr] sm:gap-6">
                   <dt className="font-meter text-sm font-bold text-ink">Safari</dt>
                   <dd className="text-sm leading-relaxed text-ink-soft">
-                    Microphone, files, and demo work; the built-in modes run,
-                    and projectM where WebGL2 is available. System audio
-                    capture is not supported. The GPU engine appears only on
-                    versions with WebGPU.
+                    Microphone, files, and demo work; the built-in modes run, and projectM where
+                    WebGL2 is available. System audio capture is not supported. The GPU engine
+                    appears only on versions with WebGPU.
                   </dd>
                 </div>
               </dl>
               <H3>If the canvas sits still</H3>
               <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                Browsers suspend audio engines until you interact with the
-                page: click anywhere once. If a system share shows a flat
-                meter, the share was made without <em>Share audio</em> ticked.
-                If the mic was blocked, re-enable it from the padlock icon in
-                the address bar.
+                Browsers suspend audio engines until you interact with the page: click anywhere
+                once. If a system share shows a flat meter, the share was made without{" "}
+                <em>Share audio</em> ticked. If the mic was blocked, re-enable it from the padlock
+                icon in the address bar.
               </p>
             </div>
           </div>
@@ -481,36 +502,31 @@ function DocsPage() {
           <div className="mt-14" />
           <H2 id="math">The math, briefly</H2>
           <P>
-            The engine runs a 2048-point FFT (Blackman-windowed by the Web
-            Audio analyzer) at the device sample rate, typically 48 kHz,
-            smoothed at 0.8. Modes sample the 1024 magnitude bins on a
-            logarithmic frequency axis, matching pitch perception. Band
-            energies split at 250 Hz and 4 kHz. Onsets are detected by
-            comparing instantaneous bass energy against its own moving
-            average; a detected onset charges a beat envelope that decays
-            exponentially, which is what makes rings drop and shards fly.
+            The engine runs a 2048-point FFT (Blackman-windowed by the Web Audio analyzer) at the
+            device sample rate, typically 48 kHz, smoothed at 0.8. Modes sample the 1024 magnitude
+            bins on a logarithmic frequency axis, matching pitch perception. Band energies split at
+            250 Hz and 4 kHz. Onsets are detected by comparing instantaneous bass energy against its
+            own moving average; a detected onset charges a beat envelope that decays exponentially,
+            which is what makes rings drop and shards fly.
           </P>
           <P>
-            Every mode is a pure function of that frame plus its own scratch
-            state, drawn to a 2D canvas. Trails are painted with translucent
-            background washes rather than buffers, which is why phosphor-style
-            persistence costs nothing extra at 8K.
+            Every mode is a pure function of that frame plus its own scratch state, drawn to a 2D
+            canvas. Trails are painted with translucent background washes rather than buffers, which
+            is why phosphor-style persistence costs nothing extra at 8K.
           </P>
 
           {/* PRIVACY */}
           <div className="mt-14" />
           <H2 id="privacy">Privacy</H2>
           <P>
-            Audio is analyzed in memory, in your browser, and never leaves
-            your machine. WaveScope has no accounts, stores nothing, and sends
-            nothing. Screen-share capture is used only to read the audio
-            track; the video is discarded.
+            Audio is analyzed in memory, in your browser, and never leaves your machine. WaveScope
+            has no accounts, stores nothing, and sends nothing. Screen-share capture is used only to
+            read the audio track; the video is discarded.
           </P>
           <P>
-            One health note: several modes flash with the beat. If you are
-            sensitive to flashing imagery, turn on <em>calm mode</em> in the
-            console deck (<Kbd>C</Kbd>): it excludes the burst-heavy modes and
-            softens beat pulses everywhere else.
+            One health note: several modes flash with the beat. If you are sensitive to flashing
+            imagery, turn on <em>calm mode</em> in the console deck (<Kbd>C</Kbd>): it excludes the
+            burst-heavy modes and softens beat pulses everywhere else.
           </P>
 
           <div className="mt-16 border-t border-ink/10 pt-6">

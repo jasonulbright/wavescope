@@ -61,3 +61,37 @@ The engine/output changes also receive a dedicated review and correction pass.
   1920×1080 frames, including after a projectM/Butterchurn switch. The operator
   layout keeps its 16:9 preview, performance controls and setup deck separate.
   Production build passes with 48 tests. See `VENUE-WORKFLOW.md`.
+- Dedicated review corrections: audience HTML cannot replace the offline
+  console shell or fall back to console UI; cache v3 purges the old entries.
+  Spotify storage failures invalidate the current tab and reject late refresh.
+  Preset queues reject work from a retired engine, including a load already
+  compiling at teardown. projectM transition duration travels with the resolved
+  preset, so a cancelled morph cannot alter a later pick. Busy editor fields
+  cannot receive changes that an in-flight save would overwrite.
+- Final local production verification used the built static files with the
+  repository's Vercel security headers. All four engines supplied decoded
+  audience frames. Verified 1080p Auto, a live Butterchurn change to 1440p,
+  blackout through an engine switch, restoration, and output close/reopen.
+  F5 from a focused deck button opened the player without reloading.
+  A fresh console restored pinned controls and an engine-scoped favorite.
+  H hid the deck; Tab revealed it and focused its first control.
+  Final build, typecheck, prerender and all 54 tests pass.
+
+## Delivered commits
+
+| Item | Commits |
+|---|---|
+| Restored tests and deploy-build gate | `7cc3da8` (existing starting commit) |
+| Spotify lifecycle and configuration | `3ca0b21`, `b3f44e6` |
+| Input isolation and unsaved editor work | `f6e105f`, `75c2068` |
+| Search, favorites and filtered automation | `22ba26e` |
+| Saved controls and keyboard access | `6d561d9` |
+| File transport and source races | `74736f4`, `68fe6d6` |
+| Checked projectM, raw lab, morph parity and review fixes | `b406737`, `75c2068`, `68fe6d6` |
+| Audience output, performance layout and offline isolation | `dbe5ab2`, `9e32faa` |
+
+The manual and README accompany the implementation. The existing landing-page
+design is preserved. No production deployment or GitHub push is part of this
+session. Real Spotify authorization/playback and physical projector/OBS
+operation remain environment-specific acceptance checks; they were not claimed
+by the local test run.

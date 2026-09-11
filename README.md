@@ -11,6 +11,13 @@ machine.
 The v2 engine architecture (worker isolation, projectM WASM, WebGPU) is
 documented in `ROADMAP-V2.md`.
 
+The web reliability/shared-usability catch-up is tracked in
+[WEB-CATCHUP.md](docs/WEB-CATCHUP.md). For a band, one operator laptop and
+one projector (or OBS), follow [the venue workflow](docs/VENUE-WORKFLOW.md).
+**output (O)** opens a video-only audience window with the exact rendered
+picture, while a persistent operator preview and performance deck stay on the
+laptop. **companions (M)** remain independent visualizers following the audio.
+
 ## Screenshots
 
 Live at [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com) — or click through the four engines here.
@@ -38,6 +45,7 @@ Live at [wavescope.signalridgelabs.com](https://wavescope.signalridgelabs.com) �
 | `/` | Landing page. The hero is a live particle instrument running the real engine (demo signal, cursor pressure, optional microphone). The gallery renders all 34 modes as live canvases. |
 | `/viz` | The console: the visualizer itself. Arm a source, pick a mode, go fullscreen. `?mode=<id>` deep-links a mode; `?follow=1` starts a companion display window; `?embed=1&src=demo` is chromeless (no deck, no HUD) for OBS browser sources and iframes. |
 | `/docs` | The manual: signals (incl. Spotify), all three engines, resolution, multi-display, shortcuts, browser support, the math. |
+| `/audience.html` | The dedicated audience video surface, opened by the console. No controls, text overlays or audio track. |
 
 ## Architecture
 
@@ -86,6 +94,13 @@ effects; nothing touches `window` during render.
   `openOnOtherDisplays()` uses the Window Management API
   (`getScreenDetails`) to open one fullscreen-sized companion per additional
   monitor in Chrome/Edge, falling back to a single popup elsewhere.
+
+- **`audience-output.ts`** — shares the current canvas using
+  `captureStream(60)` with a same-origin video-only window. A window/origin/
+  session handshake gates attachment. Renderer replacement releases old
+  tracks; blackout only hides the audience video. Auto uses 1080p in this
+  workflow, independent of operator preview size. The service worker caches
+  the audience page separately and never falls back to the console shell.
 
 - **`pcm.ts`** — full engine parity for companions. The console taps its
   analyser with an inline AudioWorklet and broadcasts raw stereo PCM
@@ -175,6 +190,12 @@ deck (3 s idle), fullscreen, companion-display launcher, and a shortcut map
 (Space/arrows cycle, F fullscreen, H hide UI, P palette, S shuffle, C calm,
 M displays, L preset lab, ? overlay).
 
+The deck now includes search and per-engine favorites (B), saved control
+pinning, an audio-file player (F5; Ctrl/Cmd+Space pauses/resumes), and audience
+output (O). Favorites can restrict shuffle/DJ/VJ/random morph choices; an empty
+allowed pool holds. Focused fields and dialogs own their keys, and the lab
+protects unsaved edits and pauses automatic visual changes.
+
 While the MilkDrop engine is active the deck adds two instruments: the
 **preset lab** (edit the active preset's init / per-frame / per-pixel eel
 source and recompile it live; save the edit as a custom preset or export
@@ -182,6 +203,11 @@ the JSON) and the **morph deck** (a target — shuffle by default, or a named
 preset — and a 0.5–10 s blend length; one press crossfades the console
 from the playing preset using the engine's own blend, and the shuffle
 timer's preset hops use the same length).
+
+projectM also offers the lab and morph deck: edit/export raw `.milk` text,
+cut immediately or morph over an explicit duration. The checked WASM wrapper
+reports compiler rejection while retaining the previous visual. The wrapper
+source and pinned rebuild script live in `scripts/`. See `ROADMAP-V2.md`.
 
 ## Design system
 
@@ -239,8 +265,9 @@ multi-display placement, the projectM (WebGL2) and WebGPU engines. Firefox
 and Safari run the built-in modes and mic/file/demo; system capture, window
 placement, and WebGPU are Chromium-only (Butterchurn covers MilkDrop there
 where WebGL2 exists). The engine toggles only appear where their platform
-feature is present. All analysis is local; no accounts, no storage, no
-telemetry.
+feature is present. Analysis is local. Settings, presets, favorites and
+optional Spotify credentials persist in browser storage; no WaveScope account
+or telemetry is required.
 
 ## License
 
